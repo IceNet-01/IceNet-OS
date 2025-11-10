@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Network Ping
+Comment=Test network connectivity with ICMP ping
+Exec=lxterminal -e 'bash -c "echo Enter hostname or IP address:; read host; sudo iceping \$host; read -p \"Press Enter to close...\""'
+Icon=network-ping
+Terminal=false
+Categories=Network;System;
+Keywords=ping;network;connectivity;test;
+StartupNotify=true

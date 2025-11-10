@@ -1,0 +1,47 @@
+#!/bin/bash
+# IceNet-OS Openbox Autostart
+# Applications and daemons to start with the desktop
+
+# Set background
+nitrogen --restore &
+
+# Start panel/taskbar
+tint2 &
+
+# Start compositor (optional transparency/effects)
+picom &
+
+# Network manager applet (if installed)
+if command -v nm-applet >/dev/null 2>&1; then
+    nm-applet &
+fi
+
+# Volume control applet (if installed)
+if command -v volumeicon >/dev/null 2>&1; then
+    volumeicon &
+fi
+
+# Clipboard manager
+if command -v clipit >/dev/null 2>&1; then
+    clipit &
+fi
+
+# Notification daemon
+if command -v dunst >/dev/null 2>&1; then
+    dunst &
+fi
+
+# Power manager (for laptops/battery systems)
+if command -v xfce4-power-manager >/dev/null 2>&1; then
+    xfce4-power-manager &
+fi
+
+# Update checker (check for system updates)
+if [ -f /usr/bin/icenet-update-notifier ]; then
+    icenet-update-notifier &
+fi
+
+# Hide mouse cursor after inactivity
+if command -v unclutter >/dev/null 2>&1; then
+    unclutter --timeout 3 &
+fi

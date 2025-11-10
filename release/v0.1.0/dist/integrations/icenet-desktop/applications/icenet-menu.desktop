@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=IceNet Start Menu
+Comment=Application launcher
+Exec=jgmenu_run
+Icon=start-here-icenet
+Terminal=false
+Categories=System;
+NoDisplay=false
+StartupNotify=false
