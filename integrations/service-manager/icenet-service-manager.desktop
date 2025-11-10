@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=IceNet Service Manager
+Comment=Manage IceNet system services and integrations
+Exec=icenet-service-manager
+Icon=preferences-system
+Terminal=false
+Type=Application
+Categories=System;Settings;
+Keywords=services;systemd;startup;boot;
+StartupNotify=true

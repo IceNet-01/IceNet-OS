@@ -1,0 +1,270 @@
+#!/bin/bash
+# IceNet-OS Service Manager CLI
+# Command-line tool for managing IceNet services
+
+set -e
+
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Services
+declare -A SERVICES
+SERVICES=(
+    ["thermal"]="icenet-thermal|Thermal Management|CPU-based heating for cold environments"
+    ["meshtastic"]="meshtastic-bridge|Meshtastic Bridge|Headless bridge for Meshtastic radios"
+    ["mesh-gui"]="mesh-bridge-gui|Mesh Bridge GUI|Visual interface for mesh configuration"
+)
+
+print_header() {
+    echo -e "${BLUE}═══════════════════════════════════════${NC}"
+    echo -e "${BLUE}  IceNet Service Manager${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════${NC}"
+    echo ""
+}
+
+get_service_status() {
+    local service=$1
+    local enabled=$(systemctl is-enabled "$service" 2>/dev/null || echo "disabled")
+    local active=$(systemctl is-active "$service" 2>/dev/null || echo "inactive")
+
+    echo "$enabled|$active"
+}
+
+print_service_status() {
+    local key=$1
+    local info="${SERVICES[$key]}"
+    IFS='|' read -r service name desc <<< "$info"
+
+    local status=$(get_service_status "$service")
+    IFS='|' read -r enabled active <<< "$status"
+
+    # Print service info
+    echo -e "${BLUE}$name${NC}"
+    echo "  Description: $desc"
+    echo "  Service: $service"
+
+    # Status
+    if [ "$active" = "active" ]; then
+        echo -e "  Status: ${GREEN}● Running${NC}"
+    else
+        echo -e "  Status: ${RED}○ Stopped${NC}"
+    fi
+
+    if [ "$enabled" = "enabled" ]; then
+        echo -e "  Boot: ${GREEN}Enabled${NC}"
+    else
+        echo -e "  Boot: ${YELLOW}Disabled${NC}"
+    fi
+    echo ""
+}
+
+list_services() {
+    print_header
+    echo "Available IceNet Services:"
+    echo ""
+
+    for key in "${!SERVICES[@]}"; do
+        print_service_status "$key"
+    done
+}
+
+enable_service() {
+    local key=$1
+    local info="${SERVICES[$key]}"
+
+    if [ -z "$info" ]; then
+        echo -e "${RED}Error: Unknown service '$key'${NC}"
+        exit 1
+    fi
+
+    IFS='|' read -r service name _ <<< "$info"
+
+    echo -e "${BLUE}Enabling $name...${NC}"
+    sudo systemctl enable "$service"
+    echo -e "${GREEN}✓ $name enabled${NC}"
+    echo "  Service will start automatically at boot"
+}
+
+disable_service() {
+    local key=$1
+    local info="${SERVICES[$key]}"
+
+    if [ -z "$info" ]; then
+        echo -e "${RED}Error: Unknown service '$key'${NC}"
+        exit 1
+    fi
+
+    IFS='|' read -r service name _ <<< "$info"
+
+    echo -e "${BLUE}Disabling $name...${NC}"
+    sudo systemctl disable "$service"
+    echo -e "${YELLOW}✓ $name disabled${NC}"
+    echo "  Service will not start at boot"
+}
+
+start_service() {
+    local key=$1
+    local info="${SERVICES[$key]}"
+
+    if [ -z "$info" ]; then
+        echo -e "${RED}Error: Unknown service '$key'${NC}"
+        exit 1
+    fi
+
+    IFS='|' read -r service name _ <<< "$info"
+
+    echo -e "${BLUE}Starting $name...${NC}"
+    sudo systemctl start "$service"
+    echo -e "${GREEN}✓ $name started${NC}"
+}
+
+stop_service() {
+    local key=$1
+    local info="${SERVICES[$key]}"
+
+    if [ -z "$info" ]; then
+        echo -e "${RED}Error: Unknown service '$key'${NC}"
+        exit 1
+    fi
+
+    IFS='|' read -r service name _ <<< "$info"
+
+    echo -e "${BLUE}Stopping $name...${NC}"
+    sudo systemctl stop "$service"
+    echo -e "${YELLOW}✓ $name stopped${NC}"
+}
+
+restart_service() {
+    local key=$1
+    local info="${SERVICES[$key]}"
+
+    if [ -z "$info" ]; then
+        echo -e "${RED}Error: Unknown service '$key'${NC}"
+        exit 1
+    fi
+
+    IFS='|' read -r service name _ <<< "$info"
+
+    echo -e "${BLUE}Restarting $name...${NC}"
+    sudo systemctl restart "$service"
+    echo -e "${GREEN}✓ $name restarted${NC}"
+}
+
+status_service() {
+    local key=$1
+    local info="${SERVICES[$key]}"
+
+    if [ -z "$info" ]; then
+        echo -e "${RED}Error: Unknown service '$key'${NC}"
+        exit 1
+    fi
+
+    IFS='|' read -r service name _ <<< "$info"
+
+    print_header
+    print_service_status "$key"
+
+    echo "Detailed status:"
+    echo ""
+    sudo systemctl status "$service" --no-pager
+}
+
+show_help() {
+    print_header
+    cat <<EOF
+Manage IceNet system services
+
+USAGE:
+    icenet-services <command> [service]
+
+COMMANDS:
+    list              List all services and their status
+    enable <service>  Enable service to start at boot
+    disable <service> Disable service from starting at boot
+    start <service>   Start service now
+    stop <service>    Stop service now
+    restart <service> Restart service
+    status <service>  Show detailed service status
+    help              Show this help message
+
+SERVICES:
+    thermal           Thermal management system
+    meshtastic        Meshtastic bridge (headless)
+    mesh-gui          Mesh bridge GUI
+
+EXAMPLES:
+    icenet-services list
+    icenet-services enable thermal
+    icenet-services start meshtastic
+    icenet-services status mesh-gui
+
+For GUI control panel, run: icenet-service-manager
+EOF
+}
+
+# Main command handler
+case "${1:-list}" in
+    list)
+        list_services
+        ;;
+    enable)
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: Service name required${NC}"
+            echo "Usage: icenet-services enable <service>"
+            exit 1
+        fi
+        enable_service "$2"
+        ;;
+    disable)
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: Service name required${NC}"
+            echo "Usage: icenet-services disable <service>"
+            exit 1
+        fi
+        disable_service "$2"
+        ;;
+    start)
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: Service name required${NC}"
+            echo "Usage: icenet-services start <service>"
+            exit 1
+        fi
+        start_service "$2"
+        ;;
+    stop)
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: Service name required${NC}"
+            echo "Usage: icenet-services stop <service>"
+            exit 1
+        fi
+        stop_service "$2"
+        ;;
+    restart)
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: Service name required${NC}"
+            echo "Usage: icenet-services restart <service>"
+            exit 1
+        fi
+        restart_service "$2"
+        ;;
+    status)
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: Service name required${NC}"
+            echo "Usage: icenet-services status <service>"
+            exit 1
+        fi
+        status_service "$2"
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        echo -e "${RED}Error: Unknown command '$1'${NC}"
+        echo "Run 'icenet-services help' for usage information"
+        exit 1
+        ;;
+esac
