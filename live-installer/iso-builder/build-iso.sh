@@ -292,11 +292,9 @@ EOF
 build_iso() {
     log "Building ISO image..."
 
+    # Let grub-mkrescue handle hybrid boot automatically
     grub-mkrescue -o "$OUTPUT_DIR/$ISO_NAME" "$ISO_DIR" \
-        -volid "ICENET-OS" \
-        -eltorito-alt-boot \
-        -e boot/grub/efi.img \
-        -no-emul-boot
+        -volid "ICENET-OS"
 
     log "ISO created: $OUTPUT_DIR/$ISO_NAME"
     log "Size: $(du -h $OUTPUT_DIR/$ISO_NAME | cut -f1)"
