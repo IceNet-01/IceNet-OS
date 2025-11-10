@@ -49,8 +49,7 @@ chroot "$CHROOT_DIR" apt-get install -y \
     python3-pip \
     python3-gi \
     gir1.2-gtk-3.0 \
-    policykit-1 \
-    gksu || {
+    policykit-1 || {
         log "ERROR: Failed to install dependencies"
         exit 1
     }
