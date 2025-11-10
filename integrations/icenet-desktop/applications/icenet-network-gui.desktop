@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Network Configuration
+Comment=Configure network interfaces and connections
+Exec=lxterminal -e 'sudo icenet-network status; read -p "Press Enter to continue..."'
+Icon=network-workgroup
+Terminal=false
+Categories=Network;Settings;
+Keywords=network;wifi;ethernet;config;
+StartupNotify=true

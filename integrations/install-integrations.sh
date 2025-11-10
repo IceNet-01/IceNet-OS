@@ -206,6 +206,17 @@ EOF
     log_info "Launch with: mesh-bridge-gui"
 }
 
+install_desktop() {
+    log_info "Installing Desktop Environment..."
+
+    cd "$SCRIPT_DIR/icenet-desktop"
+    bash install-desktop.sh
+
+    log_success "Desktop Environment installed"
+    log_info "Reboot and select 'Desktop GUI' from boot menu"
+    log_info "Or enable auto-start: sudo systemctl enable lightdm"
+}
+
 show_menu() {
     echo ""
     echo "======================================"
@@ -215,10 +226,11 @@ show_menu() {
     echo "1. Install Thermal Management System"
     echo "2. Install Meshtastic Bridge (Headless)"
     echo "3. Install Mesh Bridge GUI"
-    echo "4. Install All"
-    echo "5. Exit"
+    echo "4. Install Desktop Environment"
+    echo "5. Install All"
+    echo "6. Exit"
     echo ""
-    read -p "Select option [1-5]: " choice
+    read -p "Select option [1-6]: " choice
 
     case $choice in
         1)
@@ -231,11 +243,15 @@ show_menu() {
             install_mesh_bridge_gui
             ;;
         4)
+            install_desktop
+            ;;
+        5)
             install_thermal_mgmt
             install_meshtastic_bridge
             install_mesh_bridge_gui
+            install_desktop
             ;;
-        5)
+        6)
             log_info "Exiting..."
             exit 0
             ;;
@@ -257,12 +273,15 @@ if [ "$1" = "--all" ]; then
     install_thermal_mgmt
     install_meshtastic_bridge
     install_mesh_bridge_gui
+    install_desktop
 elif [ "$1" = "--thermal" ]; then
     install_thermal_mgmt
 elif [ "$1" = "--bridge" ]; then
     install_meshtastic_bridge
 elif [ "$1" = "--gui" ]; then
     install_mesh_bridge_gui
+elif [ "$1" = "--desktop" ]; then
+    install_desktop
 else
     show_menu
 fi
@@ -273,11 +292,14 @@ echo ""
 log_info "To enable services:"
 echo "  Thermal Management: sudo systemctl enable icenet-thermal"
 echo "  Meshtastic Bridge:  sudo systemctl enable meshtastic-bridge"
+echo "  Desktop Environment: sudo systemctl enable lightdm"
 echo ""
 log_info "To start services:"
 echo "  sudo systemctl start icenet-thermal"
 echo "  sudo systemctl start meshtastic-bridge"
+echo "  sudo systemctl start lightdm"
 echo ""
 log_info "Launch GUI applications:"
 echo "  Thermal GUI:     icenet-thermal-gui"
 echo "  Mesh Bridge GUI: mesh-bridge-gui"
+echo "  Desktop:         startx  (or reboot and select from boot menu)"

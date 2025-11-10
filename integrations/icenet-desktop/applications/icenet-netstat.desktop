@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Network Statistics
+Comment=Display network connections and interfaces
+Exec=lxterminal -e 'icenetstat -a; read -p "Press Enter to close..."'
+Icon=network-statistics
+Terminal=false
+Categories=Network;System;
+Keywords=netstat;network;connections;ports;
+StartupNotify=true

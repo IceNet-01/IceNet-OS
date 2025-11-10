@@ -1,0 +1,41 @@
+# IceNet-OS Start Menu Structure
+# Format: label,command,icon
+
+^sep(IceNet-OS)
+
+^sep(Network Tools)
+Network Ping,lxterminal -e 'bash -c "echo Enter host:; read h; sudo iceping \$h; read"',network-ping
+Network Statistics,lxterminal -e 'icenetstat -a; read',network-statistics
+Network Configuration,lxterminal -e 'sudo icenet-network status; read',network-workgroup
+Download Manager,lxterminal -e 'bash -c "echo Enter URL:; read url; icedownload \$url; read"',download
+Mesh Bridge GUI,mesh-bridge-gui,network-wireless
+
+^sep(System Tools)
+System Monitor,lxterminal -e icetop,utilities-system-monitor
+System Information,lxterminal -e 'icenet-sysinfo; read',system-info
+Disk Usage,lxterminal -e 'icedf -h; read',drive-harddisk
+Memory Usage,lxterminal -e 'icefree -h; read',memory
+Thermal Management,icenet-thermal-gui,temperature
+
+^sep(Utilities)
+File Manager,pcmanfm,folder
+Terminal,lxterminal,utilities-terminal
+Text Editor,mousepad,accessories-text-editor
+Calculator,galculator,accessories-calculator
+
+^sep(Settings)
+Display Settings,lxrandr,video-display
+Network Settings,lxterminal -e 'sudo icenet-network status; read',preferences-system-network
+Appearance,lxappearance,preferences-desktop-theme
+Desktop Preferences,obconf,preferences-desktop
+
+^sep(System)
+Task Manager,lxtask,utilities-system-monitor
+Log Viewer,lxterminal -e 'journalctl -f',text-x-generic
+Service Manager,lxterminal -e 'systemctl list-units; read',preferences-system
+
+^sep()
+Lock Screen,dm-tool lock,system-lock-screen
+Log Out,openbox --exit,system-log-out
+Reboot,systemctl reboot,system-reboot
+Shutdown,systemctl poweroff,system-shutdown

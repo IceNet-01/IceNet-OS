@@ -98,6 +98,13 @@ Desktop application for visual configuration and monitoring of Meshtastic radio 
 
 **Installation**: `cd integrations && sudo ./install-integrations.sh --gui`
 
+### Desktop Environment (Optional)
+Lightweight graphical desktop environment with taskbar, start menu, and full GUI for all tools.
+
+**Installation**: `cd integrations && sudo ./install-integrations.sh --desktop`
+**Boot**: System offers GUI/Shell choice at startup (defaults to shell after timeout)
+**Features**: Xorg, Openbox, tint2 panel, jgmenu start menu, all IceNet tools with icons
+
 **Documentation**: See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for complete guide.
 
 ## Contributing
