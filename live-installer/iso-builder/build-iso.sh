@@ -150,7 +150,8 @@ install_live_components() {
             "$SQUASHFS_DIR/usr/local/lib/icenet-installer-backend.sh"
     fi
 
-    # Copy installers
+    # Copy installers (create bin directory first)
+    mkdir -p "$SQUASHFS_DIR/usr/local/bin"
     if [ -f "$SCRIPT_DIR/../installer/icenet-installer-gui.py" ]; then
         cp "$SCRIPT_DIR/../installer/icenet-installer-gui.py" \
             "$SQUASHFS_DIR/usr/local/bin/icenet-installer-gui"
