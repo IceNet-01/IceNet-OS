@@ -1,0 +1,292 @@
+#!/bin/bash
+# IceNet-OS Network Management Script
+#
+# Simplified network configuration for IceNet-OS
+
+set -e
+
+INTERFACES_FILE="/etc/network/interfaces"
+
+show_usage() {
+    cat <<EOF
+IceNet-OS Network Management
+
+Usage: $(basename $0) <command> [options]
+
+Commands:
+  status              Show network status
+  list                List available interfaces
+  up <interface>      Bring interface up
+  down <interface>    Bring interface down
+  dhcp <interface>    Configure interface for DHCP
+  static <iface> <ip> <netmask> <gateway>
+                      Configure static IP
+  wifi <ssid> <pass>  Connect to WiFi network
+
+Examples:
+  $(basename $0) status
+  $(basename $0) dhcp eth0
+  $(basename $0) static eth0 192.168.1.100 255.255.255.0 192.168.1.1
+  $(basename $0) wifi MyNetwork MyPassword
+EOF
+}
+
+show_status() {
+    echo "Network Interfaces:"
+    echo ""
+
+    for iface in $(ls /sys/class/net/); do
+        if [ "$iface" = "lo" ]; then
+            continue
+        fi
+
+        echo "Interface: $iface"
+
+        # Check if up
+        state=$(cat /sys/class/net/$iface/operstate 2>/dev/null || echo "unknown")
+        echo "  State: $state"
+
+        # Get IP address
+        ip_addr=$(ip addr show $iface | grep 'inet ' | awk '{print $2}' | head -n1)
+        if [ -n "$ip_addr" ]; then
+            echo "  IP Address: $ip_addr"
+        else
+            echo "  IP Address: Not assigned"
+        fi
+
+        # Get MAC address
+        mac=$(cat /sys/class/net/$iface/address 2>/dev/null || echo "unknown")
+        echo "  MAC Address: $mac"
+
+        # Get speed if available
+        if [ -f /sys/class/net/$iface/speed ]; then
+            speed=$(cat /sys/class/net/$iface/speed 2>/dev/null || echo "unknown")
+            if [ "$speed" != "unknown" ] && [ "$speed" -gt 0 ]; then
+                echo "  Speed: ${speed}Mbps"
+            fi
+        fi
+
+        echo ""
+    done
+
+    # Show routing table
+    echo "Routing Table:"
+    ip route show
+    echo ""
+
+    # Show DNS
+    echo "DNS Servers:"
+    if [ -f /etc/resolv.conf ]; then
+        grep nameserver /etc/resolv.conf | awk '{print "  " $2}'
+    fi
+}
+
+list_interfaces() {
+    echo "Available Network Interfaces:"
+    for iface in $(ls /sys/class/net/); do
+        if [ "$iface" != "lo" ]; then
+            state=$(cat /sys/class/net/$iface/operstate 2>/dev/null || echo "unknown")
+            echo "  $iface ($state)"
+        fi
+    done
+}
+
+interface_up() {
+    local iface=$1
+    if [ -z "$iface" ]; then
+        echo "Error: Interface not specified"
+        return 1
+    fi
+
+    echo "Bringing up interface $iface..."
+    ip link set $iface up
+    echo "Interface $iface is up"
+}
+
+interface_down() {
+    local iface=$1
+    if [ -z "$iface" ]; then
+        echo "Error: Interface not specified"
+        return 1
+    fi
+
+    echo "Bringing down interface $iface..."
+    ip link set $iface down
+    echo "Interface $iface is down"
+}
+
+configure_dhcp() {
+    local iface=$1
+    if [ -z "$iface" ]; then
+        echo "Error: Interface not specified"
+        return 1
+    fi
+
+    echo "Configuring $iface for DHCP..."
+
+    # Update interfaces file
+    if grep -q "iface $iface" $INTERFACES_FILE 2>/dev/null; then
+        sed -i "/iface $iface/,/^$/c\auto $iface\niface $iface inet dhcp\n" $INTERFACES_FILE
+    else
+        echo "" >> $INTERFACES_FILE
+        echo "auto $iface" >> $INTERFACES_FILE
+        echo "iface $iface inet dhcp" >> $INTERFACES_FILE
+    fi
+
+    # Bring up interface
+    ip link set $iface up
+
+    # Request DHCP address
+    if command -v dhclient >/dev/null 2>&1; then
+        dhclient $iface
+    elif command -v udhcpc >/dev/null 2>&1; then
+        udhcpc -i $iface
+    else
+        echo "Warning: No DHCP client found. Install dhclient or udhcpc."
+        return 1
+    fi
+
+    echo "DHCP configuration complete"
+    ip addr show $iface | grep 'inet '
+}
+
+configure_static() {
+    local iface=$1
+    local ip_addr=$2
+    local netmask=$3
+    local gateway=$4
+
+    if [ -z "$iface" ] || [ -z "$ip_addr" ] || [ -z "$netmask" ] || [ -z "$gateway" ]; then
+        echo "Error: Missing arguments"
+        echo "Usage: $(basename $0) static <interface> <ip> <netmask> <gateway>"
+        return 1
+    fi
+
+    echo "Configuring $iface with static IP..."
+
+    # Update interfaces file
+    if grep -q "iface $iface" $INTERFACES_FILE 2>/dev/null; then
+        sed -i "/iface $iface/,/^$/d" $INTERFACES_FILE
+    fi
+
+    cat >> $INTERFACES_FILE <<EOF
+
+auto $iface
+iface $iface inet static
+    address $ip_addr
+    netmask $netmask
+    gateway $gateway
+EOF
+
+    # Apply configuration
+    ip link set $iface up
+    ip addr flush dev $iface
+    ip addr add $ip_addr/$netmask dev $iface
+    ip route add default via $gateway dev $iface 2>/dev/null || true
+
+    echo "Static IP configuration complete"
+    ip addr show $iface | grep 'inet '
+}
+
+configure_wifi() {
+    local ssid=$1
+    local password=$2
+
+    if [ -z "$ssid" ]; then
+        echo "Error: SSID not specified"
+        return 1
+    fi
+
+    # Find WiFi interface
+    local wifi_iface=""
+    for iface in $(ls /sys/class/net/); do
+        if [ -d "/sys/class/net/$iface/wireless" ]; then
+            wifi_iface=$iface
+            break
+        fi
+    done
+
+    if [ -z "$wifi_iface" ]; then
+        echo "Error: No WiFi interface found"
+        return 1
+    fi
+
+    echo "Configuring WiFi on $wifi_iface..."
+
+    # Create wpa_supplicant config
+    local wpa_conf="/etc/wpa_supplicant/wpa_supplicant-$wifi_iface.conf"
+    mkdir -p /etc/wpa_supplicant
+
+    if [ -z "$password" ]; then
+        # Open network
+        cat > $wpa_conf <<EOF
+network={
+    ssid="$ssid"
+    key_mgmt=NONE
+}
+EOF
+    else
+        # WPA/WPA2 network
+        cat > $wpa_conf <<EOF
+network={
+    ssid="$ssid"
+    psk="$password"
+}
+EOF
+    fi
+
+    # Bring up interface
+    ip link set $wifi_iface up
+
+    # Start wpa_supplicant
+    if command -v wpa_supplicant >/dev/null 2>&1; then
+        killall wpa_supplicant 2>/dev/null || true
+        wpa_supplicant -B -i $wifi_iface -c $wpa_conf
+
+        # Wait for connection
+        echo "Connecting to $ssid..."
+        sleep 3
+
+        # Get IP via DHCP
+        if command -v dhclient >/dev/null 2>&1; then
+            dhclient $wifi_iface
+        elif command -v udhcpc >/dev/null 2>&1; then
+            udhcpc -i $wifi_iface
+        fi
+
+        echo "WiFi configuration complete"
+        ip addr show $wifi_iface | grep 'inet '
+    else
+        echo "Error: wpa_supplicant not found. Install wireless tools."
+        return 1
+    fi
+}
+
+# Main command dispatcher
+case "${1:-}" in
+    status)
+        show_status
+        ;;
+    list)
+        list_interfaces
+        ;;
+    up)
+        interface_up "$2"
+        ;;
+    down)
+        interface_down "$2"
+        ;;
+    dhcp)
+        configure_dhcp "$2"
+        ;;
+    static)
+        configure_static "$2" "$3" "$4" "$5"
+        ;;
+    wifi)
+        configure_wifi "$2" "$3"
+        ;;
+    *)
+        show_usage
+        exit 1
+        ;;
+esac

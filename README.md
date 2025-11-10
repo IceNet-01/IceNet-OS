@@ -18,7 +18,11 @@ IceNet-OS uses a pragmatic approach:
 - **Userspace**: Completely custom implementation
 - **Init System**: Custom lightweight init (icenet-init)
 - **Package Manager**: Custom package management (ice-pkg)
-- **Core Utilities**: Minimal, security-focused implementations
+- **Core Utilities**: Comprehensive system utilities
+  - Network tools (ping, netstat, wget)
+  - System monitoring (top, free, df)
+  - File management (ls, cat, grep)
+  - Network configuration scripts
 
 ## Design Principles
 
@@ -36,6 +40,11 @@ IceNet-OS/
 ├── bootloader/      # Boot configuration for both platforms
 ├── init/            # Custom init system
 ├── core/            # Core system utilities
+│   ├── netutils/    # Network utilities (ping, netstat, wget)
+│   ├── sysutils/    # System monitoring (top, free, df)
+│   ├── fileutils/   # File operations (ls)
+│   ├── textutils/   # Text processing (cat, grep)
+│   └── scripts/     # Management scripts
 ├── pkgmgr/          # Package manager implementation
 ├── rootfs/          # Root filesystem structure
 ├── build/           # Build system and tools
@@ -50,11 +59,15 @@ IceNet-OS/
 
 ## Current Status
 
-**Phase 1: Foundation** - In Progress
+**Phase 1: Foundation** - Complete
 - [x] Project initialization
-- [ ] Build system setup
-- [ ] Kernel configuration
-- [ ] Basic rootfs structure
+- [x] Build system setup
+- [x] Kernel configuration
+- [x] Custom init system
+- [x] Package manager
+- [x] Core utilities suite
+- [x] Network management tools
+- [x] Comprehensive documentation
 
 ## Contributing
 
