@@ -177,6 +177,21 @@ EOF
     log "Live boot components installed"
 }
 
+# Pre-install integrations
+pre_install_integrations() {
+    log "Pre-installing IceNet integrations..."
+
+    if [ -f "$SCRIPT_DIR/pre-install-integrations.sh" ]; then
+        bash "$SCRIPT_DIR/pre-install-integrations.sh" \
+            "$SQUASHFS_DIR" \
+            "$SCRIPT_DIR/../../integrations"
+    else
+        warning "Pre-install script not found, skipping"
+    fi
+
+    log "Integrations pre-installed"
+}
+
 # Create squashfs
 create_squashfs() {
     log "Creating squashfs filesystem (this may take several minutes)..."
@@ -290,6 +305,7 @@ main() {
     build_base_system
     install_icenet_components
     install_live_components
+    pre_install_integrations
     create_squashfs
     copy_kernel
     create_grub_config

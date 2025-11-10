@@ -28,11 +28,12 @@ Display Settings,lxrandr,video-display
 Network Settings,lxterminal -e 'sudo icenet-network status; read',preferences-system-network
 Appearance,lxappearance,preferences-desktop-theme
 Desktop Preferences,obconf,preferences-desktop
+IceNet Service Manager,icenet-service-manager,preferences-system
 
 ^sep(System)
 Task Manager,lxtask,utilities-system-monitor
 Log Viewer,lxterminal -e 'journalctl -f',text-x-generic
-Service Manager,lxterminal -e 'systemctl list-units; read',preferences-system
+System Services,lxterminal -e 'icenet-services list; read',preferences-system
 
 ^sep()
 Lock Screen,dm-tool lock,system-lock-screen
