@@ -23,6 +23,10 @@ IceNet-OS uses a pragmatic approach:
   - System monitoring (top, free, df)
   - File management (ls, cat, grep)
   - Network configuration scripts
+- **Integrated Software**: Optional specialized components
+  - Thermal management for cold environments
+  - Meshtastic radio bridge (headless and GUI)
+  - Network mesh management tools
 
 ## Design Principles
 
@@ -48,6 +52,10 @@ IceNet-OS/
 ├── pkgmgr/          # Package manager implementation
 ├── rootfs/          # Root filesystem structure
 ├── build/           # Build system and tools
+├── integrations/    # Integrated software components
+│   ├── thermal-mgmt/        # Thermal management system
+│   ├── meshtastic-bridge/   # Meshtastic bridge (headless)
+│   └── mesh-bridge-gui/     # Mesh bridge GUI
 └── docs/            # Documentation
 ```
 
@@ -67,7 +75,30 @@ IceNet-OS/
 - [x] Package manager
 - [x] Core utilities suite
 - [x] Network management tools
+- [x] Integrated software components
 - [x] Comprehensive documentation
+
+## Integrated Software
+
+IceNet-OS includes native integration for specialized applications:
+
+### Thermal Management System
+Automatic CPU-based heating to prevent equipment freezing in cold environments. Perfect for outdoor installations and remote deployments.
+
+**Installation**: `cd integrations && sudo ./install-integrations.sh --thermal`
+
+### Meshtastic Bridge (Headless)
+Production-ready bridge service for Meshtastic radio networks. Forwards messages between radios with automatic recovery and monitoring.
+
+**Installation**: `cd integrations && sudo ./install-integrations.sh --bridge`
+**Note**: Installed but disabled by default. Enable when needed.
+
+### Mesh Bridge GUI
+Desktop application for visual configuration and monitoring of Meshtastic radio bridges.
+
+**Installation**: `cd integrations && sudo ./install-integrations.sh --gui`
+
+**Documentation**: See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for complete guide.
 
 ## Contributing
 

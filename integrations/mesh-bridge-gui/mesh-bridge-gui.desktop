@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Meshtastic Bridge GUI
+Comment=Visual configuration for Meshtastic radio bridges
+Exec=/usr/bin/mesh-bridge-gui
+Icon=/usr/share/icons/icenet/mesh-bridge.png
+Terminal=false
+Categories=Network;Communication;HamRadio;
+Keywords=meshtastic;lora;radio;bridge;relay;
+StartupNotify=true
