@@ -1,0 +1,5 @@
+# Hostname service
+# Sets the system hostname
+
+exec=/bin/hostname -F /etc/hostname
+respawn=no

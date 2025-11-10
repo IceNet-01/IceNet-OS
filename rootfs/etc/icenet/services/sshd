@@ -1,0 +1,5 @@
+# SSH daemon service
+
+exec=/usr/sbin/sshd -D
+depends=network
+respawn=yes
