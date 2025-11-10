@@ -97,6 +97,8 @@ build_base_system() {
         chroot "$SQUASHFS_DIR" apt-get update
         chroot "$SQUASHFS_DIR" apt-get install -y \
             linux-image-amd64 \
+            live-boot \
+            live-boot-initramfs-tools \
             grub-efi-amd64-bin \
             grub-pc-bin \
             grub-common \
@@ -181,7 +183,7 @@ install_live_components() {
 [Desktop Entry]
 Name=Install IceNet-OS
 Comment=Install IceNet-OS to hard drive
-Exec=gksudo icenet-installer-gui
+Exec=pkexec icenet-installer-gui
 Icon=system-software-install
 Terminal=false
 Type=Application
