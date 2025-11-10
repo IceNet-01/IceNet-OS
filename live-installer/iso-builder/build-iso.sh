@@ -10,7 +10,9 @@ BUILD_DIR="/tmp/icenet-iso-build"
 ISO_DIR="$BUILD_DIR/iso"
 SQUASHFS_DIR="$BUILD_DIR/squashfs"
 OUTPUT_DIR="$SCRIPT_DIR/output"
-ISO_NAME="icenet-os-$(date +%Y%m%d).iso"
+
+# ISO naming with timestamp to prevent collisions
+ISO_NAME="icenet-os-$(date +%Y%m%d-%H%M%S).iso"
 
 # Colors
 RED='\033[0;31m'
@@ -198,17 +200,20 @@ create_squashfs() {
 
     # Update initramfs
     if [ -f "$SQUASHFS_DIR/usr/sbin/update-initramfs" ]; then
-        chroot "$SQUASHFS_DIR" update-initramfs -u 2>/dev/null || warning "Failed to update initramfs"
+        if ! chroot "$SQUASHFS_DIR" update-initramfs -u 2>&1; then
+            warning "Failed to update initramfs (non-critical, continuing)"
+        fi
     fi
 
-    # Create squashfs
+    # Create squashfs with progress indicator
     mksquashfs "$SQUASHFS_DIR" "$ISO_DIR/live/filesystem.squashfs" \
         -comp xz \
         -b 1M \
         -Xdict-size 100% \
-        -noappend
+        -noappend \
+        -progress
 
-    log "Squashfs created: $(du -h $ISO_DIR/live/filesystem.squashfs | cut -f1)"
+    log "Squashfs created: $(du -h "$ISO_DIR/live/filesystem.squashfs" | cut -f1)"
 }
 
 # Copy kernel and initrd
