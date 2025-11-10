@@ -69,7 +69,7 @@ build_base_system() {
     log "Building base system..."
 
     # Use existing system or debootstrap
-    if [ -d "/live/rootfs" ]; then
+    if [ -d "/live/rootfs" ] && [ -f "/live/rootfs/usr/bin/apt-get" ]; then
         log "Using existing live system"
         rsync -aAX /live/rootfs/ "$SQUASHFS_DIR/" \
             --exclude=/proc/* \
@@ -80,15 +80,20 @@ build_base_system() {
             --exclude=/mnt/* \
             --exclude=/media/* \
             --exclude=/live/*
-    elif [ -d "$SCRIPT_DIR/../../rootfs" ]; then
+    elif [ -d "$SCRIPT_DIR/../../rootfs" ] && [ -f "$SCRIPT_DIR/../../rootfs/usr/bin/apt-get" ]; then
         log "Using IceNet-OS rootfs"
         rsync -aAX "$SCRIPT_DIR/../../rootfs/" "$SQUASHFS_DIR/"
     else
-        log "Bootstrapping Debian base system"
+        log "Bootstrapping Debian base system (this will take 5-10 minutes)"
+
+        # Use a fast mirror for better download speeds
+        DEBIAN_MIRROR="http://deb.debian.org/debian/"
+
         debootstrap --arch=amd64 --variant=minbase \
-            bookworm "$SQUASHFS_DIR" http://deb.debian.org/debian/
+            bookworm "$SQUASHFS_DIR" "$DEBIAN_MIRROR"
 
         # Install essential packages
+        log "Installing essential packages..."
         chroot "$SQUASHFS_DIR" apt-get update
         chroot "$SQUASHFS_DIR" apt-get install -y \
             linux-image-amd64 \
