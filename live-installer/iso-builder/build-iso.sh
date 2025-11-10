@@ -97,14 +97,20 @@ build_base_system() {
         chroot "$SQUASHFS_DIR" apt-get update
         chroot "$SQUASHFS_DIR" apt-get install -y \
             linux-image-amd64 \
-            grub-pc \
-            grub-efi-amd64 \
+            grub-efi-amd64-bin \
+            grub-pc-bin \
+            grub-common \
+            grub2-common \
             network-manager \
             sudo \
             dialog \
             python3 \
             python3-gi \
-            gir1.2-gtk-3.0
+            gir1.2-gtk-3.0 \
+            xorriso \
+            isolinux \
+            systemd \
+            systemd-sysv
     fi
 
     log "Base system ready"
