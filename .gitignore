@@ -1,0 +1,59 @@
+# Build artifacts
+build-output/
+build-cache/
+*.o
+*.a
+*.so
+*.img
+*.iso
+*.tar
+*.tar.gz
+*.tar.xz
+*.tar.bz2
+
+# Kernel build
+linux-*/
+*.ko
+*.mod.c
+.tmp_versions/
+
+# Compiled binaries
+init/icenet-init
+pkgmgr/ice-pkg
+core/*/bin/*
+
+# Editor files
+*.swp
+*.swo
+*~
+.*.sw?
+*.bak
+.vscode/
+.idea/
+*.sublime-*
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Package management
+*.deb
+*.rpm
+
+# Testing
+test-output/
+coverage/
+
+# Personal notes
+notes.txt
+TODO.txt

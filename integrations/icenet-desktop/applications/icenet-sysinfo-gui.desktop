@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=System Information
+Comment=View comprehensive system information
+Exec=lxterminal -e icenet-sysinfo
+Icon=system-info
+Terminal=false
+Categories=System;Monitor;
+Keywords=system;info;hardware;stats;
+StartupNotify=true

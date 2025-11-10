@@ -1,0 +1,4 @@
+# System logging service
+
+exec=/usr/sbin/syslogd -n
+respawn=yes

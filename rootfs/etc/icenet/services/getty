@@ -1,0 +1,4 @@
+# Getty service - login prompt
+
+exec=/sbin/getty 38400 tty1
+respawn=yes

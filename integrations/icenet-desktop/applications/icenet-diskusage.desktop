@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Disk Usage
+Comment=Display filesystem disk space usage
+Exec=lxterminal -e 'icedf -h; read -p "Press Enter to close..."'
+Icon=drive-harddisk
+Terminal=false
+Categories=System;FileTools;
+Keywords=df;disk;space;usage;filesystem;
+StartupNotify=true

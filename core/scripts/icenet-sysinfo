@@ -1,0 +1,126 @@
+#!/bin/bash
+# IceNet-OS System Information Display
+#
+# Display comprehensive system information
+
+show_system_info() {
+    echo "====================================="
+    echo "    IceNet-OS System Information"
+    echo "====================================="
+    echo ""
+
+    # OS Information
+    echo "Operating System:"
+    if [ -f /etc/os-release ]; then
+        source /etc/os-release
+        echo "  Name: ${NAME:-IceNet-OS}"
+        echo "  Version: ${VERSION:-0.1.0}"
+    else
+        echo "  Name: IceNet-OS"
+        echo "  Version: 0.1.0"
+    fi
+    echo "  Kernel: $(uname -r)"
+    echo "  Architecture: $(uname -m)"
+    echo ""
+
+    # Hostname
+    echo "Hostname: $(hostname)"
+    echo ""
+
+    # Uptime
+    echo "Uptime:"
+    uptime_seconds=$(cat /proc/uptime | cut -d' ' -f1 | cut -d'.' -f1)
+    days=$((uptime_seconds / 86400))
+    hours=$(( (uptime_seconds % 86400) / 3600 ))
+    minutes=$(( (uptime_seconds % 3600) / 60 ))
+    echo "  $days days, $hours hours, $minutes minutes"
+    echo ""
+
+    # CPU Information
+    echo "CPU:"
+    if [ -f /proc/cpuinfo ]; then
+        cpu_model=$(grep "model name" /proc/cpuinfo | head -n1 | cut -d':' -f2 | xargs)
+        cpu_count=$(grep -c "processor" /proc/cpuinfo)
+        if [ -n "$cpu_model" ]; then
+            echo "  Model: $cpu_model"
+        else
+            # ARM fallback
+            cpu_model=$(grep "Hardware" /proc/cpuinfo | head -n1 | cut -d':' -f2 | xargs)
+            if [ -n "$cpu_model" ]; then
+                echo "  Hardware: $cpu_model"
+            fi
+        fi
+        echo "  Cores: $cpu_count"
+
+        # CPU frequency
+        if [ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq ]; then
+            freq=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq)
+            freq_mhz=$((freq / 1000))
+            echo "  Frequency: ${freq_mhz} MHz"
+        fi
+    fi
+    echo ""
+
+    # Memory
+    echo "Memory:"
+    if [ -f /proc/meminfo ]; then
+        total=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+        free=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
+        used=$((total - free))
+        echo "  Total: $((total / 1024)) MB"
+        echo "  Used: $((used / 1024)) MB"
+        echo "  Free: $((free / 1024)) MB"
+    fi
+    echo ""
+
+    # Storage
+    echo "Storage:"
+    df -h / | tail -n1 | awk '{printf "  Root: %s / %s used (%s)\n", $3, $2, $5}'
+    echo ""
+
+    # Network
+    echo "Network Interfaces:"
+    for iface in $(ls /sys/class/net/ 2>/dev/null); do
+        if [ "$iface" = "lo" ]; then
+            continue
+        fi
+
+        state=$(cat /sys/class/net/$iface/operstate 2>/dev/null || echo "unknown")
+        ip_addr=$(ip addr show $iface 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1 | head -n1)
+
+        if [ -n "$ip_addr" ]; then
+            echo "  $iface: $ip_addr ($state)"
+        else
+            echo "  $iface: No IP ($state)"
+        fi
+    done
+    echo ""
+
+    # Load Average
+    echo "Load Average:"
+    if [ -f /proc/loadavg ]; then
+        read load1 load5 load15 rest < /proc/loadavg
+        echo "  1 min: $load1"
+        echo "  5 min: $load5"
+        echo "  15 min: $load15"
+    fi
+    echo ""
+
+    # Processes
+    echo "Processes:"
+    echo "  Running: $(ps aux | wc -l)"
+    echo ""
+
+    # Temperature (if available)
+    if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
+        echo "Temperature:"
+        temp=$(cat /sys/class/thermal/thermal_zone0/temp)
+        temp_c=$((temp / 1000))
+        echo "  CPU: ${temp_c}°C"
+        echo ""
+    fi
+
+    echo "====================================="
+}
+
+show_system_info

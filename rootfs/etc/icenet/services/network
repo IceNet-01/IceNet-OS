@@ -1,0 +1,4 @@
+# Network initialization service
+
+exec=/sbin/ifup -a
+respawn=no
