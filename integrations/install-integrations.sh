@@ -217,6 +217,17 @@ install_desktop() {
     log_info "Or enable auto-start: sudo systemctl enable lightdm"
 }
 
+install_mesh_radio_suite() {
+    log_info "Installing Mesh & Radio Suite..."
+
+    cd "$SCRIPT_DIR/mesh-radio-suite"
+    bash install-mesh-radio-suite.sh --all
+
+    log_success "Mesh & Radio Suite installed"
+    log_info "All tools available in start menu"
+    log_info "Quick starts: meshtastic --help, nomadnet, gqrx"
+}
+
 show_menu() {
     echo ""
     echo "======================================"
@@ -227,10 +238,11 @@ show_menu() {
     echo "2. Install Meshtastic Bridge (Headless)"
     echo "3. Install Mesh Bridge GUI"
     echo "4. Install Desktop Environment"
-    echo "5. Install All"
-    echo "6. Exit"
+    echo "5. Install Mesh & Radio Suite (Edge, Meshtastic, Reticulum, LoRa, SDR)"
+    echo "6. Install All"
+    echo "7. Exit"
     echo ""
-    read -p "Select option [1-6]: " choice
+    read -p "Select option [1-7]: " choice
 
     case $choice in
         1)
@@ -246,12 +258,16 @@ show_menu() {
             install_desktop
             ;;
         5)
+            install_mesh_radio_suite
+            ;;
+        6)
             install_thermal_mgmt
             install_meshtastic_bridge
             install_mesh_bridge_gui
             install_desktop
+            install_mesh_radio_suite
             ;;
-        6)
+        7)
             log_info "Exiting..."
             exit 0
             ;;
@@ -274,6 +290,7 @@ if [ "$1" = "--all" ]; then
     install_meshtastic_bridge
     install_mesh_bridge_gui
     install_desktop
+    install_mesh_radio_suite
 elif [ "$1" = "--thermal" ]; then
     install_thermal_mgmt
 elif [ "$1" = "--bridge" ]; then
@@ -282,6 +299,8 @@ elif [ "$1" = "--gui" ]; then
     install_mesh_bridge_gui
 elif [ "$1" = "--desktop" ]; then
     install_desktop
+elif [ "$1" = "--mesh-radio-suite" ]; then
+    install_mesh_radio_suite
 else
     show_menu
 fi

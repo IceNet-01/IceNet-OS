@@ -105,6 +105,23 @@ Lightweight graphical desktop environment with taskbar, start menu, and full GUI
 **Boot**: System offers GUI/Shell choice at startup (defaults to shell after timeout)
 **Features**: Xorg, Openbox, tint2 panel, jgmenu start menu, all IceNet tools with icons
 
+### Mesh & Radio Suite (Turnkey Solution)
+Complete turnkey solution for mesh networking, LoRa communications, and Software Defined Radio (SDR).
+
+**Included Software**:
+- **Microsoft Edge** - Modern Chromium-based browser
+- **Meshtastic Ecosystem** - Complete toolset (CLI, flasher, web interface)
+- **Reticulum Stack** - Cryptographic mesh protocol with NomadNet, Sideband, LXMF
+- **LoRa Suite** - ChirpStack, gateway software, packet tools
+- **SDR Suite** - GNU Radio, GQRX, SDR++, dump1090, rtl_433, Ham radio tools
+- **Mesh Protocols** - Yggdrasil, cjdns, Babel, BATMAN-adv
+
+**Installation**: `cd integrations && sudo ./install-integrations.sh --mesh-radio-suite`
+**Quick Start**: See [integrations/mesh-radio-suite/QUICKSTART.md](integrations/mesh-radio-suite/QUICKSTART.md)
+**Full Documentation**: See [integrations/mesh-radio-suite/README.md](integrations/mesh-radio-suite/README.md)
+
+All software appears in desktop start menu with organized categories and icons.
+
 **Documentation**: See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for complete guide.
 
 ## Contributing
