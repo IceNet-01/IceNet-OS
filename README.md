@@ -11,6 +11,26 @@ IceNet-OS aims to be a lean, secure, and performant operating system that learns
 - **Zima boards** (x86_64 architecture)
 - **Raspberry Pi** (ARM architecture - Pi 3, 4, 5)
 
+## Installation Methods
+
+IceNet-OS can be used in multiple ways:
+
+### Live USB/SD Card
+Run directly from USB drive or SD card without installation
+- Try IceNet-OS without affecting your system
+- Perfect for testing or temporary use
+- Optional persistence to save changes
+- Can load entire system to RAM
+
+### Full Installation
+Install to internal drive for permanent use
+- Graphical installer (GTK-based, similar to Linux Mint)
+- Text-based installer (for headless systems)
+- Automatic partitioning and bootloader setup
+- Preserves existing data during installation
+
+**Quick Start**: See [live-installer/QUICKSTART.md](live-installer/QUICKSTART.md)
+
 ## Architecture
 
 IceNet-OS uses a pragmatic approach:
@@ -52,10 +72,17 @@ IceNet-OS/
 ├── pkgmgr/          # Package manager implementation
 ├── rootfs/          # Root filesystem structure
 ├── build/           # Build system and tools
+├── live-installer/  # Live USB and installer system
+│   ├── initramfs/   # Live boot hooks
+│   ├── installer/   # GUI and TUI installers
+│   ├── iso-builder/ # ISO/image generation scripts
+│   └── boot-menu/   # Boot menu configurations
 ├── integrations/    # Integrated software components
 │   ├── thermal-mgmt/        # Thermal management system
 │   ├── meshtastic-bridge/   # Meshtastic bridge (headless)
-│   └── mesh-bridge-gui/     # Mesh bridge GUI
+│   ├── mesh-bridge-gui/     # Mesh bridge GUI
+│   ├── icenet-desktop/      # Desktop environment
+│   └── mesh-radio-suite/    # Mesh & SDR software
 └── docs/            # Documentation
 ```
 
@@ -76,7 +103,46 @@ IceNet-OS/
 - [x] Core utilities suite
 - [x] Network management tools
 - [x] Integrated software components
+- [x] Desktop environment
+- [x] Mesh & Radio suite
+- [x] Live USB system
+- [x] Graphical and text installers
 - [x] Comprehensive documentation
+
+## Getting Started
+
+### Try IceNet-OS (Live Mode)
+
+1. Build ISO or ARM image:
+   ```bash
+   cd live-installer/iso-builder
+   sudo ./build-iso.sh              # For x86_64 (Zima boards)
+   # OR
+   sudo ./build-arm-image.sh        # For ARM (Raspberry Pi)
+   ```
+
+2. Write to USB/SD card:
+   ```bash
+   sudo dd if=output/icenet-os-*.iso of=/dev/sdX bs=4M status=progress
+   ```
+
+3. Boot from USB/SD card
+
+4. Choose "Live Mode" from boot menu
+
+**Full Guide**: [live-installer/QUICKSTART.md](live-installer/QUICKSTART.md)
+
+### Install IceNet-OS
+
+From live mode:
+- **GUI**: Click "Install IceNet-OS" icon on desktop
+- **CLI**: Run `sudo icenet-install` in terminal
+
+Installation takes 10-15 minutes and includes:
+- Automatic disk partitioning
+- User account creation
+- Bootloader installation
+- System configuration
 
 ## Integrated Software
 
