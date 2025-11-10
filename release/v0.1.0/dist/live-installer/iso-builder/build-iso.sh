@@ -1,0 +1,309 @@
+#!/bin/bash
+# IceNet-OS ISO Builder
+# Builds bootable ISO image for x86_64 systems
+
+set -e
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="/tmp/icenet-iso-build"
+ISO_DIR="$BUILD_DIR/iso"
+SQUASHFS_DIR="$BUILD_DIR/squashfs"
+OUTPUT_DIR="$SCRIPT_DIR/output"
+ISO_NAME="icenet-os-$(date +%Y%m%d).iso"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+log() {
+    echo -e "${GREEN}[INFO]${NC} $*"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $*" >&2
+    exit 1
+}
+
+warning() {
+    echo -e "${YELLOW}[WARN]${NC} $*"
+}
+
+# Check requirements
+check_requirements() {
+    log "Checking requirements..."
+
+    local missing=()
+
+    command -v debootstrap >/dev/null || missing+=("debootstrap")
+    command -v mksquashfs >/dev/null || missing+=("squashfs-tools")
+    command -v grub-mkrescue >/dev/null || missing+=("grub-pc-bin grub-efi-amd64-bin")
+    command -v xorriso >/dev/null || missing+=("xorriso")
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        error "Missing required packages: ${missing[*]}\nInstall with: apt-get install ${missing[*]}"
+    fi
+
+    if [ $(id -u) -ne 0 ]; then
+        error "This script must be run as root"
+    fi
+
+    log "All requirements satisfied"
+}
+
+# Clean build directory
+clean_build() {
+    log "Cleaning build directory..."
+    rm -rf "$BUILD_DIR"
+    mkdir -p "$ISO_DIR"/{live,boot/grub}
+    mkdir -p "$SQUASHFS_DIR"
+    mkdir -p "$OUTPUT_DIR"
+}
+
+# Build base system
+build_base_system() {
+    log "Building base system..."
+
+    # Use existing system or debootstrap
+    if [ -d "/live/rootfs" ]; then
+        log "Using existing live system"
+        rsync -aAX /live/rootfs/ "$SQUASHFS_DIR/" \
+            --exclude=/proc/* \
+            --exclude=/sys/* \
+            --exclude=/dev/* \
+            --exclude=/tmp/* \
+            --exclude=/run/* \
+            --exclude=/mnt/* \
+            --exclude=/media/* \
+            --exclude=/live/*
+    elif [ -d "$SCRIPT_DIR/../../rootfs" ]; then
+        log "Using IceNet-OS rootfs"
+        rsync -aAX "$SCRIPT_DIR/../../rootfs/" "$SQUASHFS_DIR/"
+    else
+        log "Bootstrapping Debian base system"
+        debootstrap --arch=amd64 --variant=minbase \
+            bookworm "$SQUASHFS_DIR" http://deb.debian.org/debian/
+
+        # Install essential packages
+        chroot "$SQUASHFS_DIR" apt-get update
+        chroot "$SQUASHFS_DIR" apt-get install -y \
+            linux-image-amd64 \
+            grub-pc \
+            grub-efi-amd64 \
+            network-manager \
+            sudo \
+            dialog \
+            python3 \
+            python3-gi \
+            gir1.2-gtk-3.0
+    fi
+
+    log "Base system ready"
+}
+
+# Install IceNet components
+install_icenet_components() {
+    log "Installing IceNet components..."
+
+    # Copy init system
+    if [ -f "$SCRIPT_DIR/../../init/icenet-init" ]; then
+        cp "$SCRIPT_DIR/../../init/icenet-init" "$SQUASHFS_DIR/sbin/"
+        chmod +x "$SQUASHFS_DIR/sbin/icenet-init"
+    fi
+
+    # Copy package manager
+    if [ -f "$SCRIPT_DIR/../../pkgmgr/ice-pkg" ]; then
+        cp "$SCRIPT_DIR/../../pkgmgr/ice-pkg" "$SQUASHFS_DIR/usr/local/bin/"
+        chmod +x "$SQUASHFS_DIR/usr/local/bin/ice-pkg"
+    fi
+
+    # Copy utilities
+    if [ -d "$SCRIPT_DIR/../../core" ]; then
+        cp -r "$SCRIPT_DIR/../../core/netutils"/* "$SQUASHFS_DIR/usr/local/bin/" 2>/dev/null || true
+        cp -r "$SCRIPT_DIR/../../core/sysutils"/* "$SQUASHFS_DIR/usr/local/bin/" 2>/dev/null || true
+        chmod +x "$SQUASHFS_DIR/usr/local/bin/"ice* 2>/dev/null || true
+    fi
+
+    log "IceNet components installed"
+}
+
+# Install live boot components
+install_live_components() {
+    log "Installing live boot components..."
+
+    # Copy live boot hook
+    mkdir -p "$SQUASHFS_DIR/etc/initramfs-tools/hooks"
+    if [ -f "$SCRIPT_DIR/../initramfs/live-boot.hook" ]; then
+        cp "$SCRIPT_DIR/../initramfs/live-boot.hook" \
+            "$SQUASHFS_DIR/etc/initramfs-tools/hooks/live-boot"
+        chmod +x "$SQUASHFS_DIR/etc/initramfs-tools/hooks/live-boot"
+    fi
+
+    # Copy installer backend
+    mkdir -p "$SQUASHFS_DIR/usr/local/lib"
+    if [ -f "$SCRIPT_DIR/../installer/installer-backend.sh" ]; then
+        cp "$SCRIPT_DIR/../installer/installer-backend.sh" \
+            "$SQUASHFS_DIR/usr/local/lib/icenet-installer-backend.sh"
+    fi
+
+    # Copy installers
+    if [ -f "$SCRIPT_DIR/../installer/icenet-installer-gui.py" ]; then
+        cp "$SCRIPT_DIR/../installer/icenet-installer-gui.py" \
+            "$SQUASHFS_DIR/usr/local/bin/icenet-installer-gui"
+        chmod +x "$SQUASHFS_DIR/usr/local/bin/icenet-installer-gui"
+    fi
+
+    if [ -f "$SCRIPT_DIR/../installer/icenet-installer-tui.sh" ]; then
+        cp "$SCRIPT_DIR/../installer/icenet-installer-tui.sh" \
+            "$SQUASHFS_DIR/usr/local/bin/icenet-install"
+        chmod +x "$SQUASHFS_DIR/usr/local/bin/icenet-install"
+    fi
+
+    # Create desktop entry for GUI installer
+    mkdir -p "$SQUASHFS_DIR/usr/share/applications"
+    cat > "$SQUASHFS_DIR/usr/share/applications/icenet-installer.desktop" <<EOF
+[Desktop Entry]
+Name=Install IceNet-OS
+Comment=Install IceNet-OS to hard drive
+Exec=gksudo icenet-installer-gui
+Icon=system-software-install
+Terminal=false
+Type=Application
+Categories=System;
+EOF
+
+    log "Live boot components installed"
+}
+
+# Create squashfs
+create_squashfs() {
+    log "Creating squashfs filesystem (this may take several minutes)..."
+
+    # Update initramfs
+    if [ -f "$SQUASHFS_DIR/usr/sbin/update-initramfs" ]; then
+        chroot "$SQUASHFS_DIR" update-initramfs -u 2>/dev/null || warning "Failed to update initramfs"
+    fi
+
+    # Create squashfs
+    mksquashfs "$SQUASHFS_DIR" "$ISO_DIR/live/filesystem.squashfs" \
+        -comp xz \
+        -b 1M \
+        -Xdict-size 100% \
+        -noappend
+
+    log "Squashfs created: $(du -h $ISO_DIR/live/filesystem.squashfs | cut -f1)"
+}
+
+# Copy kernel and initrd
+copy_kernel() {
+    log "Copying kernel and initrd..."
+
+    # Find kernel
+    KERNEL=$(find "$SQUASHFS_DIR/boot" -name "vmlinuz-*" | sort -V | tail -n1)
+    INITRD=$(find "$SQUASHFS_DIR/boot" -name "initrd.img-*" | sort -V | tail -n1)
+
+    if [ -z "$KERNEL" ]; then
+        error "No kernel found in squashfs"
+    fi
+
+    cp "$KERNEL" "$ISO_DIR/live/vmlinuz"
+    cp "$INITRD" "$ISO_DIR/live/initrd.img"
+
+    log "Kernel and initrd copied"
+}
+
+# Create GRUB configuration
+create_grub_config() {
+    log "Creating GRUB configuration..."
+
+    cat > "$ISO_DIR/boot/grub/grub.cfg" <<'EOF'
+set default="0"
+set timeout=10
+
+menuentry "IceNet-OS Live" {
+    linux /live/vmlinuz boot=live icenet-live quiet splash
+    initrd /live/initrd.img
+}
+
+menuentry "IceNet-OS Live (Persistence)" {
+    linux /live/vmlinuz boot=live icenet-live persistence quiet splash
+    initrd /live/initrd.img
+}
+
+menuentry "IceNet-OS Live (Load to RAM)" {
+    linux /live/vmlinuz boot=live icenet-live toram quiet splash
+    initrd /live/initrd.img
+}
+
+menuentry "Install IceNet-OS" {
+    linux /live/vmlinuz boot=live icenet-live quiet splash
+    initrd /live/initrd.img
+}
+
+menuentry "IceNet-OS Live (Debug)" {
+    linux /live/vmlinuz boot=live icenet-live debug
+    initrd /live/initrd.img
+}
+
+menuentry "Boot from first hard disk" {
+    set root=(hd0)
+    chainloader +1
+}
+EOF
+
+    log "GRUB configuration created"
+}
+
+# Build ISO
+build_iso() {
+    log "Building ISO image..."
+
+    grub-mkrescue -o "$OUTPUT_DIR/$ISO_NAME" "$ISO_DIR" \
+        -volid "ICENET-OS" \
+        -eltorito-alt-boot \
+        -e boot/grub/efi.img \
+        -no-emul-boot
+
+    log "ISO created: $OUTPUT_DIR/$ISO_NAME"
+    log "Size: $(du -h $OUTPUT_DIR/$ISO_NAME | cut -f1)"
+}
+
+# Create checksum
+create_checksum() {
+    log "Creating checksums..."
+
+    cd "$OUTPUT_DIR"
+    sha256sum "$ISO_NAME" > "$ISO_NAME.sha256"
+    md5sum "$ISO_NAME" > "$ISO_NAME.md5"
+
+    log "Checksums created"
+}
+
+# Main build process
+main() {
+    log "===== IceNet-OS ISO Builder ====="
+
+    check_requirements
+    clean_build
+    build_base_system
+    install_icenet_components
+    install_live_components
+    create_squashfs
+    copy_kernel
+    create_grub_config
+    build_iso
+    create_checksum
+
+    log "===== Build Complete ====="
+    log "ISO location: $OUTPUT_DIR/$ISO_NAME"
+    log ""
+    log "To write to USB:"
+    log "  sudo dd if=$OUTPUT_DIR/$ISO_NAME of=/dev/sdX bs=4M status=progress"
+    log ""
+    log "To test in QEMU:"
+    log "  qemu-system-x86_64 -m 2G -cdrom $OUTPUT_DIR/$ISO_NAME -boot d"
+}
+
+main "$@"

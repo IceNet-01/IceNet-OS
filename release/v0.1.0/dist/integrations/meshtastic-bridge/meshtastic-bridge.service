@@ -1,0 +1,33 @@
+[Unit]
+Description=IceNet-OS Meshtastic Bridge (Headless)
+Documentation=https://github.com/IceNet-01/meshtastic-bridge-headless
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/meshtastic-bridge-daemon
+Restart=always
+RestartSec=10
+User=meshtastic-bridge
+Group=dialout
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment="PYTHONUNBUFFERED=1"
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/icenet/meshtastic-bridge
+DeviceAllow=/dev/ttyUSB* rw
+DeviceAllow=/dev/ttyACM* rw
+
+# Resource limits
+MemoryMax=200M
+CPUQuota=20%
+
+[Install]
+WantedBy=multi-user.target

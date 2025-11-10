@@ -1,0 +1,28 @@
+IceNet-OS v0.1.0 Build Information
+=====================================
+
+Build Date: 2025-11-10 17:14:26 UTC
+Build Host: runsc
+Build System: Linux 4.4.0 x86_64
+Builder: IceNet-OS Build System
+
+Components:
+-----------
+11 binaries compiled
+3 integration scripts
+6 documentation files
+
+Installation:
+-------------
+See INSTALL.md for installation instructions
+
+For live ISO/image creation:
+  cd live-installer/iso-builder
+  sudo ./build-iso.sh              (for x86_64)
+  sudo ./build-arm-image.sh        (for ARM)
+
+Support:
+--------
+GitHub: https://github.com/IceNet-01/IceNet-OS
+Documentation: See doc/ directory
+

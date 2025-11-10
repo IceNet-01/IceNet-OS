@@ -1,0 +1,204 @@
+#!/bin/sh
+# IceNet-OS Live Boot Initramfs Hook
+# Handles mounting of live filesystem with overlay
+
+PREREQ=""
+
+prereqs() {
+    echo "$PREREQ"
+}
+
+case "$1" in
+    prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+# Source initramfs functions
+. /scripts/functions
+
+# Live boot configuration
+LIVE_MEDIA_PATH="/live"
+OVERLAY_SIZE="512M"
+PERSISTENCE_SIZE="4G"
+
+log_begin_msg "IceNet-OS Live Boot"
+
+# Detect live boot parameters
+parse_cmdline() {
+    for x in $(cat /proc/cmdline); do
+        case $x in
+            icenet-live)
+                LIVE_BOOT=1
+                ;;
+            icenet-live=*)
+                LIVE_BOOT=1
+                LIVE_MODE="${x#icenet-live=}"
+                ;;
+            persistence)
+                PERSISTENCE=1
+                ;;
+            toram)
+                TO_RAM=1
+                ;;
+            debug)
+                DEBUG=1
+                set -x
+                ;;
+        esac
+    done
+}
+
+# Find the live media device
+find_live_media() {
+    log_begin_msg "Searching for live media"
+
+    # Wait for devices to settle
+    udevadm settle --timeout=30
+
+    # Look for squashfs filesystem
+    for device in /dev/sd[a-z]* /dev/mmcblk[0-9]* /dev/nvme[0-9]*; do
+        [ -b "$device" ] || continue
+
+        # Try mounting to find squashfs
+        mkdir -p /tmp/media
+        if mount -o ro "$device" /tmp/media 2>/dev/null; then
+            if [ -f "/tmp/media/live/filesystem.squashfs" ]; then
+                LIVE_DEVICE="$device"
+                log_success_msg "Found live media on $device"
+                return 0
+            fi
+            umount /tmp/media
+        fi
+    done
+
+    log_failure_msg "Live media not found"
+    return 1
+}
+
+# Find persistence partition
+find_persistence() {
+    log_begin_msg "Searching for persistence partition"
+
+    for device in /dev/sd[a-z][0-9]* /dev/mmcblk[0-9]p[0-9]*; do
+        [ -b "$device" ] || continue
+
+        # Check for persistence label
+        LABEL=$(blkid -o value -s LABEL "$device" 2>/dev/null)
+        if [ "$LABEL" = "icenet-persist" ]; then
+            PERSIST_DEVICE="$device"
+            log_success_msg "Found persistence on $device"
+            return 0
+        fi
+    done
+
+    log_warning_msg "No persistence partition found"
+    return 1
+}
+
+# Mount the live filesystem
+mount_live() {
+    log_begin_msg "Mounting live filesystem"
+
+    # Mount the media device
+    mkdir -p /live/media
+    mount -o ro "$LIVE_DEVICE" /live/media
+
+    # Mount the squashfs
+    mkdir -p /live/rootfs
+    mount -t squashfs -o ro,loop /live/media/live/filesystem.squashfs /live/rootfs
+
+    if [ "$TO_RAM" = "1" ]; then
+        log_begin_msg "Copying system to RAM"
+        mkdir -p /live/rootfs-ram
+        cp -a /live/rootfs/* /live/rootfs-ram/
+        umount /live/rootfs
+        umount /live/media
+        mount --bind /live/rootfs-ram /live/rootfs
+        log_success_msg "System loaded to RAM"
+    fi
+
+    log_success_msg "Live filesystem mounted"
+}
+
+# Setup overlay filesystem
+setup_overlay() {
+    log_begin_msg "Setting up overlay filesystem"
+
+    if [ "$PERSISTENCE" = "1" ] && [ -n "$PERSIST_DEVICE" ]; then
+        # Use persistence partition
+        mkdir -p /live/persistence
+        mount "$PERSIST_DEVICE" /live/persistence
+
+        mkdir -p /live/persistence/upper
+        mkdir -p /live/persistence/work
+
+        UPPER_DIR="/live/persistence/upper"
+        WORK_DIR="/live/persistence/work"
+
+        log_success_msg "Using persistent storage"
+    else
+        # Use tmpfs for overlay
+        mkdir -p /live/overlay
+        mount -t tmpfs -o size=$OVERLAY_SIZE tmpfs /live/overlay
+
+        mkdir -p /live/overlay/upper
+        mkdir -p /live/overlay/work
+
+        UPPER_DIR="/live/overlay/upper"
+        WORK_DIR="/live/overlay/work"
+
+        log_success_msg "Using temporary storage"
+    fi
+
+    # Create the overlay mount
+    mkdir -p ${rootmnt}
+    mount -t overlay overlay \
+        -o lowerdir=/live/rootfs,upperdir=$UPPER_DIR,workdir=$WORK_DIR \
+        ${rootmnt}
+
+    log_success_msg "Overlay filesystem ready"
+}
+
+# Create live marker
+create_live_marker() {
+    # Mark system as live boot
+    mkdir -p ${rootmnt}/run/icenet
+    touch ${rootmnt}/run/icenet/live-boot
+
+    if [ "$PERSISTENCE" = "1" ]; then
+        touch ${rootmnt}/run/icenet/persistence
+    fi
+
+    # Save boot parameters
+    echo "LIVE_DEVICE=$LIVE_DEVICE" > ${rootmnt}/run/icenet/live-config
+    echo "LIVE_MODE=$LIVE_MODE" >> ${rootmnt}/run/icenet/live-config
+    echo "PERSISTENCE=$PERSISTENCE" >> ${rootmnt}/run/icenet/live-config
+}
+
+# Main execution
+main() {
+    parse_cmdline
+
+    if [ "$LIVE_BOOT" != "1" ]; then
+        # Not a live boot, skip
+        return 0
+    fi
+
+    find_live_media || panic "Live media not found"
+
+    if [ "$PERSISTENCE" = "1" ]; then
+        find_persistence
+    fi
+
+    mount_live
+    setup_overlay
+    create_live_marker
+
+    log_success_msg "IceNet-OS live boot complete"
+}
+
+main
+
+log_end_msg

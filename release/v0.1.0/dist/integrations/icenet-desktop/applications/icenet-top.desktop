@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=System Monitor
+Comment=Monitor system processes and resources
+Exec=lxterminal -e icetop
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Monitor;
+Keywords=top;process;cpu;memory;monitor;
+StartupNotify=true
