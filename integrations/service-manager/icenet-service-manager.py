@@ -323,6 +323,19 @@ class ServiceControlPanel(Gtk.Window):
                     f"{service['name']} already running",
                     "Service was already started"
                 )
+            elif service_name == "icenet-thermal.service":
+                # Check journal for thermal zone error
+                _, journal_out, _ = self.run_command(['journalctl', '-u', service_name, '-n', '20', '--no-pager'])
+                if "No thermal zones found" in journal_out or "thermal zone not found" in journal_out.lower():
+                    self.show_error(
+                        "Thermal Service Not Supported",
+                        "This system has no thermal sensors (common in VMs).\n\n"
+                        "The thermal management service is designed for physical hardware "
+                        "in cold environments.\n\n"
+                        "This service is not needed for your system."
+                    )
+                else:
+                    self.show_error(f"Failed to start {service['name']}", error)
             else:
                 self.show_error(f"Failed to start {service['name']}", error)
 

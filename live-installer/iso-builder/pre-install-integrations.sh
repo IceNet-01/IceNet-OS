@@ -69,6 +69,7 @@ readonly TEMP_THRESHOLD=10  # Celsius
 readonly CHECK_INTERVAL=60  # seconds
 readonly HEAT_DURATION=30   # seconds
 readonly NUM_PROCESSES=4
+readonly MAX_RETRIES=5  # Number of times to check for thermal zone before giving up
 
 # Logging to syslog
 log_msg() {
@@ -91,11 +92,34 @@ trap cleanup SIGTERM SIGINT EXIT
 log_msg "Starting IceNet Thermal Management System"
 log_msg "Temperature threshold: ${TEMP_THRESHOLD}°C"
 
+# Check if thermal zones exist at startup
+retry_count=0
+while [ $retry_count -lt $MAX_RETRIES ]; do
+    if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
+        log_msg "Thermal zone found, starting monitoring"
+        break
+    fi
+    retry_count=$((retry_count + 1))
+    if [ $retry_count -lt $MAX_RETRIES ]; then
+        log_msg "Thermal zone not found (attempt $retry_count/$MAX_RETRIES), waiting..."
+        sleep 10
+    fi
+done
+
+# If no thermal zone after retries, exit gracefully
+if [ ! -f /sys/class/thermal/thermal_zone0/temp ]; then
+    log_msg "ERROR: No thermal zones found on this system"
+    log_msg "This service is designed for physical hardware with temperature sensors"
+    log_msg "VMs and some systems may not have thermal zones - this is normal"
+    log_msg "Service will exit. Disable this service if not needed: sudo systemctl disable icenet-thermal"
+    exit 0
+fi
+
 # Track heating process PIDs
 HEAT_PIDS=""
 
 while true; do
-    # Check if thermal zone exists
+    # Check if thermal zone still exists (might be hot-unplugged)
     if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
         # Safely read temperature
         if temp_raw=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null); then
@@ -127,7 +151,8 @@ while true; do
             log_msg "Warning: Failed to read thermal zone"
         fi
     else
-        log_msg "Warning: Thermal zone not found, retrying in ${CHECK_INTERVAL}s"
+        log_msg "Warning: Thermal zone disappeared, exiting"
+        exit 0
     fi
 
     sleep $CHECK_INTERVAL
@@ -470,7 +495,7 @@ chroot "$CHROOT_DIR" apt-get install -y --no-install-recommends \
     galculator \
     lxrandr \
     dunst \
-    clipit \
+    diodon \
     unclutter \
     fonts-dejavu \
     papirus-icon-theme \
