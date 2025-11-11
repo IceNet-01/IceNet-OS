@@ -26,8 +26,15 @@ error() {
     exit 1
 }
 
-# Get script directory (repo root)
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Get script directory (repo root) - resolve symlinks
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+# Follow symlinks to get real script location
+while [ -L "$SCRIPT_PATH" ]; do
+    SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    [[ $SCRIPT_PATH != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 cd "$REPO_ROOT"
 
 log "IceNet-OS ISO Rebuild Script"
