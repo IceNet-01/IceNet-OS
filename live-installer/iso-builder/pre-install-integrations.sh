@@ -437,5 +437,104 @@ else
     log "WARNING: mesh-bridge-gui.service not found"
 fi
 
+# 4. Install Desktop Environment
+log "Installing IceNet Desktop Environment..."
+
+# Install desktop packages
+log "Installing Xorg and desktop packages..."
+chroot "$CHROOT_DIR" apt-get install -y \
+    xorg \
+    openbox \
+    obconf \
+    tint2 \
+    jgmenu \
+    lightdm \
+    lightdm-gtk-greeter \
+    nitrogen \
+    picom \
+    lxterminal \
+    pcmanfm \
+    mousepad \
+    lxappearance \
+    lxtask \
+    galculator \
+    lxrandr \
+    dunst \
+    clipit \
+    unclutter \
+    fonts-dejavu \
+    papirus-icon-theme \
+    numlockx || {
+        log "ERROR: Failed to install desktop packages"
+        exit 1
+    }
+
+# Create configuration directories
+mkdir -p "$CHROOT_DIR/etc/skel/.config"/{openbox,tint2,jgmenu}
+mkdir -p "$CHROOT_DIR/etc/skel/.local/share/applications"
+
+# Copy desktop configuration files
+if [ -d "$INTEGRATIONS_DIR/icenet-desktop/config" ]; then
+    cp "$INTEGRATIONS_DIR/icenet-desktop/config/openbox-rc.xml" \
+        "$CHROOT_DIR/etc/skel/.config/openbox/rc.xml"
+    cp "$INTEGRATIONS_DIR/icenet-desktop/config/openbox-autostart" \
+        "$CHROOT_DIR/etc/skel/.config/openbox/autostart"
+    chmod +x "$CHROOT_DIR/etc/skel/.config/openbox/autostart"
+
+    cp "$INTEGRATIONS_DIR/icenet-desktop/config/tint2rc" \
+        "$CHROOT_DIR/etc/skel/.config/tint2/tint2rc"
+    cp "$INTEGRATIONS_DIR/icenet-desktop/config/jgmenurc" \
+        "$CHROOT_DIR/etc/skel/.config/jgmenu/jgmenurc"
+    cp "$INTEGRATIONS_DIR/icenet-desktop/config/jgmenu-apps.csv" \
+        "$CHROOT_DIR/etc/skel/.config/jgmenu/apps.csv"
+fi
+
+# Install desktop application entries
+if [ -d "$INTEGRATIONS_DIR/icenet-desktop/applications" ]; then
+    cp "$INTEGRATIONS_DIR/icenet-desktop/applications/"*.desktop \
+        "$CHROOT_DIR/usr/share/applications/"
+fi
+
+# Create .xinitrc for startx
+cat > "$CHROOT_DIR/etc/skel/.xinitrc" <<'EOF'
+#!/bin/sh
+# IceNet-OS X Session
+if [ -f ~/.Xresources ]; then
+    xrdb -merge ~/.Xresources
+fi
+exec openbox-session
+EOF
+chmod +x "$CHROOT_DIR/etc/skel/.xinitrc"
+
+# Configure LightDM
+cat > "$CHROOT_DIR/etc/lightdm/lightdm.conf" <<'EOF'
+[Seat:*]
+greeter-session=lightdm-gtk-greeter
+user-session=openbox
+autologin-user=icenet
+autologin-user-timeout=0
+EOF
+
+# Enable LightDM to start on boot
+chroot "$CHROOT_DIR" systemctl enable lightdm.service
+
+# Apply desktop config to icenet user (since user is created before this runs)
+if [ -d "$CHROOT_DIR/home/icenet" ]; then
+    log "Applying desktop configuration to icenet user..."
+
+    mkdir -p "$CHROOT_DIR/home/icenet/.config"/{openbox,tint2,jgmenu}
+    mkdir -p "$CHROOT_DIR/home/icenet/.local/share/applications"
+
+    cp -r "$CHROOT_DIR/etc/skel/.config/openbox" "$CHROOT_DIR/home/icenet/.config/"
+    cp -r "$CHROOT_DIR/etc/skel/.config/tint2" "$CHROOT_DIR/home/icenet/.config/"
+    cp -r "$CHROOT_DIR/etc/skel/.config/jgmenu" "$CHROOT_DIR/home/icenet/.config/"
+    cp "$CHROOT_DIR/etc/skel/.xinitrc" "$CHROOT_DIR/home/icenet/"
+
+    # Fix ownership
+    chroot "$CHROOT_DIR" chown -R icenet:icenet /home/icenet
+fi
+
+log "✓ Desktop Environment installed and configured"
+
 log "All integrations pre-installed and disabled by default"
 log "Users can enable them via: icenet-service-manager (GUI) or icenet-services (CLI)"
