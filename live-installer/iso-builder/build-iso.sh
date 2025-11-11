@@ -122,7 +122,21 @@ EOF
             apt-transport-https \
             ca-certificates
 
+        # Prevent initramfs generation during package installation
+        # (we'll regenerate it properly after all packages are installed)
+        log "Configuring initramfs to defer updates..."
+        cat > "$SQUASHFS_DIR/usr/sbin/update-initramfs.disabled" <<'EOF'
+#!/bin/sh
+# Temporarily disabled during package installation
+echo "update-initramfs: deferred (will regenerate after package installation)"
+exit 0
+EOF
+        chmod +x "$SQUASHFS_DIR/usr/sbin/update-initramfs.disabled"
+        [ -f "$SQUASHFS_DIR/usr/sbin/update-initramfs" ] && mv "$SQUASHFS_DIR/usr/sbin/update-initramfs" "$SQUASHFS_DIR/usr/sbin/update-initramfs.real" || true
+        ln -sf /usr/sbin/update-initramfs.disabled "$SQUASHFS_DIR/usr/sbin/update-initramfs"
+
         # Install core packages
+        log "Installing core packages (initramfs generation deferred)..."
         chroot "$SQUASHFS_DIR" apt-get install -y -o Acquire::Queue-Mode=host \
             linux-image-amd64 \
             live-boot \
@@ -141,6 +155,19 @@ EOF
             isolinux \
             systemd \
             systemd-sysv
+
+        # Restore update-initramfs and regenerate properly
+        log "Restoring initramfs generation..."
+        rm -f "$SQUASHFS_DIR/usr/sbin/update-initramfs"
+        [ -f "$SQUASHFS_DIR/usr/sbin/update-initramfs.real" ] && mv "$SQUASHFS_DIR/usr/sbin/update-initramfs.real" "$SQUASHFS_DIR/usr/sbin/update-initramfs" || true
+        rm -f "$SQUASHFS_DIR/usr/sbin/update-initramfs.disabled"
+
+        # Now regenerate initramfs with all packages in place
+        log "Generating initramfs..."
+        chroot "$SQUASHFS_DIR" update-initramfs -c -k all || {
+            log "WARNING: initramfs generation had issues, trying alternative method..."
+            chroot "$SQUASHFS_DIR" dpkg-reconfigure linux-image-amd64 || true
+        }
 
         # Save to cache for future builds
         log "Caching base system for future builds..."
