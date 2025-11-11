@@ -146,6 +146,35 @@ EOF
 
 log "✓ Hostname configured"
 
+# Create default user account
+log "Creating default user (icenet/icenet)..."
+chroot "$CHROOT_DIR" useradd -m -s /bin/bash -G sudo,netdev,plugdev icenet || true
+echo "icenet:icenet" | chroot "$CHROOT_DIR" chpasswd
+
+# Allow sudo without password for convenience
+echo "icenet ALL=(ALL) NOPASSWD:ALL" > "$CHROOT_DIR/etc/sudoers.d/icenet"
+chmod 0440 "$CHROOT_DIR/etc/sudoers.d/icenet"
+
+log "✓ User account created (username: icenet, password: icenet)"
+
+# Configure lightdm for autologin
+log "Configuring automatic login..."
+mkdir -p "$CHROOT_DIR/etc/lightdm/lightdm.conf.d"
+cat > "$CHROOT_DIR/etc/lightdm/lightdm.conf.d/50-autologin.conf" <<'EOF'
+[Seat:*]
+autologin-user=icenet
+autologin-user-timeout=0
+user-session=LXDE
+EOF
+
+# Enable lightdm
+chroot "$CHROOT_DIR" systemctl enable lightdm
+
+# Set graphical target as default
+chroot "$CHROOT_DIR" systemctl set-default graphical.target
+
+log "✓ Automatic login configured"
+
 # Install IceNet Software Center
 log "Installing IceNet Software Center..."
 mkdir -p "$CHROOT_DIR/opt/icenet-software-center"
@@ -203,11 +232,16 @@ log "==================================="
 log "Minimal Base Installation Complete"
 log "==================================="
 log "Installed:"
-log "  ✓ LXDE Desktop"
+log "  ✓ LXDE Desktop (auto-login enabled)"
 log "  ✓ Microsoft Edge"
 log "  ✓ SSH Server (port 22)"
 log "  ✓ RDP Server (port 3389)"
 log "  ✓ VNC Server (configurable)"
 log "  ✓ IceNet Software Center"
+log ""
+log "Default user account:"
+log "  Username: icenet"
+log "  Password: icenet"
+log "  Sudo: enabled (no password required)"
 log ""
 log "Optional components can be installed via Software Center"

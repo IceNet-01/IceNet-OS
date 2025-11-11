@@ -465,27 +465,32 @@ set default="0"
 set timeout=10
 
 menuentry "IceNet-OS Live" {
-    linux /live/vmlinuz boot=live icenet-live quiet splash
+    linux /live/vmlinuz boot=live components quiet splash systemd.unit=graphical.target
     initrd /live/initrd.img
 }
 
 menuentry "IceNet-OS Live (Persistence)" {
-    linux /live/vmlinuz boot=live icenet-live persistence quiet splash
+    linux /live/vmlinuz boot=live components persistence quiet splash systemd.unit=graphical.target
     initrd /live/initrd.img
 }
 
 menuentry "IceNet-OS Live (Load to RAM)" {
-    linux /live/vmlinuz boot=live icenet-live toram quiet splash
+    linux /live/vmlinuz boot=live components toram quiet splash systemd.unit=graphical.target
     initrd /live/initrd.img
 }
 
 menuentry "Install IceNet-OS" {
-    linux /live/vmlinuz boot=live icenet-live quiet splash
+    linux /live/vmlinuz boot=live components quiet splash systemd.unit=graphical.target
     initrd /live/initrd.img
 }
 
-menuentry "IceNet-OS Live (Debug)" {
-    linux /live/vmlinuz boot=live icenet-live debug
+menuentry "IceNet-OS Live (Debug - No Quiet)" {
+    linux /live/vmlinuz boot=live components systemd.unit=graphical.target
+    initrd /live/initrd.img
+}
+
+menuentry "IceNet-OS Live (Safe Mode)" {
+    linux /live/vmlinuz boot=live components nomodeset systemd.unit=graphical.target
     initrd /live/initrd.img
 }
 
