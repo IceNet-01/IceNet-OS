@@ -558,5 +558,50 @@ fi
 
 log "✓ Desktop Environment installed and configured"
 
+# 5. Install Reticulum Stack (nomadnet, etc.)
+log "Installing Reticulum mesh networking stack..."
+
+# Install Reticulum and tools via pip
+chroot "$CHROOT_DIR" pip3 install --break-system-packages \
+    rns \
+    nomadnet \
+    sbapp \
+    lxmf \
+    rnodeconf 2>&1 || {
+        log "WARNING: Reticulum installation failed, continuing anyway"
+    }
+
+# Create NomadNet desktop entry
+cat > "$CHROOT_DIR/usr/share/applications/nomadnet.desktop" <<'EOF'
+[Desktop Entry]
+Version=1.0
+Name=NomadNet
+Comment=Off-grid mesh communication system
+Exec=lxterminal -e nomadnet
+Icon=network-workgroup
+Terminal=false
+Type=Application
+Categories=Network;Communication;
+Keywords=reticulum;mesh;nomadnet;
+StartupNotify=true
+EOF
+
+# Create Sideband desktop entry
+cat > "$CHROOT_DIR/usr/share/applications/sideband.desktop" <<'EOF'
+[Desktop Entry]
+Version=1.0
+Name=Sideband
+Comment=LXMF messaging client
+Exec=sideband
+Icon=internet-mail
+Terminal=false
+Type=Application
+Categories=Network;Communication;
+Keywords=reticulum;lxmf;messaging;
+StartupNotify=true
+EOF
+
+log "✓ Reticulum stack installed (nomadnet, sideband, lxmf)"
+
 log "All integrations pre-installed and disabled by default"
 log "Users can enable them via: icenet-service-manager (GUI) or icenet-services (CLI)"

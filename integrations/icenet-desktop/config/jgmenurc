@@ -5,7 +5,7 @@
 position_mode        = pointer
 stay_alive           = 1
 hide_on_startup      = 0
-csv_cmd              = pmenu
+csv_cmd              = apps
 tint2_look           = 0
 at_pointer           = 0
 terminal_exec        = lxterminal
