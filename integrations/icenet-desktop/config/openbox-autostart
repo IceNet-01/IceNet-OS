@@ -2,6 +2,13 @@
 # IceNet-OS Openbox Autostart
 # Applications and daemons to start with the desktop
 
+# PolicyKit authentication agent (REQUIRED for pkexec to work)
+if [ -f /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1 ]; then
+    /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1 &
+elif command -v lxpolkit >/dev/null 2>&1; then
+    lxpolkit &
+fi
+
 # Set background
 nitrogen --restore &
 

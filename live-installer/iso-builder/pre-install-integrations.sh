@@ -615,6 +615,7 @@ chroot "$CHROOT_DIR" apt-get install -y --no-install-recommends \
     diodon \
     network-manager-gnome \
     volumeicon-alsa \
+    policykit-1-gnome \
     unclutter \
     fonts-dejavu \
     fonts-noto \
