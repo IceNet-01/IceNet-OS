@@ -118,6 +118,26 @@ build_base_system() {
     log "Base system ready"
 }
 
+# Setup default user
+setup_default_user() {
+    log "Setting up default user..."
+
+    # Create icenet user
+    chroot "$SQUASHFS_DIR" useradd -m -s /bin/bash -G sudo icenet
+
+    # Set password to 'icenet'
+    echo "icenet:icenet" | chroot "$SQUASHFS_DIR" chpasswd
+
+    # Set root password to 'root'
+    echo "root:root" | chroot "$SQUASHFS_DIR" chpasswd
+
+    # Allow sudo without password for icenet user
+    echo "icenet ALL=(ALL) NOPASSWD:ALL" > "$SQUASHFS_DIR/etc/sudoers.d/icenet"
+    chmod 0440 "$SQUASHFS_DIR/etc/sudoers.d/icenet"
+
+    log "Default user created: icenet/icenet (root/root)"
+}
+
 # Install IceNet components
 install_icenet_components() {
     log "Installing IceNet components..."
@@ -320,6 +340,7 @@ main() {
     check_requirements
     clean_build
     build_base_system
+    setup_default_user
     install_icenet_components
     install_live_components
     pre_install_integrations
