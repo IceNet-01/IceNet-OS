@@ -597,7 +597,6 @@ chroot "$CHROOT_DIR" apt-get install -y --no-install-recommends \
     xserver-xorg-video-vesa \
     xserver-xorg-input-all \
     openbox \
-    openbox-themes \
     obconf \
     tint2 \
     jgmenu \
