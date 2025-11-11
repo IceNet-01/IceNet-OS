@@ -34,7 +34,7 @@ chroot "$CHROOT_DIR" apt-get install -y \
     lxtask \
     lxterminal \
     pcmanfm \
-    leafpad \
+    mousepad \
     galculator \
     network-manager-gnome \
     policykit-1-gnome \
@@ -52,6 +52,10 @@ chroot "$CHROOT_DIR" apt-get install -y \
     }
 
 log "✓ LXDE desktop installed"
+
+# Install GPG tools needed for package signing
+log "Installing GPG tools..."
+chroot "$CHROOT_DIR" apt-get install -y gnupg wget ca-certificates
 
 # Install Microsoft Edge
 log "Installing Microsoft Edge browser..."
