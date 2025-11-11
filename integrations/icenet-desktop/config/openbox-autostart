@@ -22,8 +22,8 @@ if command -v volumeicon >/dev/null 2>&1; then
 fi
 
 # Clipboard manager
-if command -v clipit >/dev/null 2>&1; then
-    clipit &
+if command -v diodon >/dev/null 2>&1; then
+    diodon &
 fi
 
 # Notification daemon

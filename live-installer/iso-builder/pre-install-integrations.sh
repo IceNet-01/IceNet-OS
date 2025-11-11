@@ -171,7 +171,7 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=/opt/icenet-thermal/thermal-manager.sh
-Restart=always
+Restart=on-failure
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
@@ -496,8 +496,11 @@ chroot "$CHROOT_DIR" apt-get install -y --no-install-recommends \
     lxrandr \
     dunst \
     diodon \
+    network-manager-gnome \
+    volumeicon-alsa \
     unclutter \
     fonts-dejavu \
+    fonts-noto \
     papirus-icon-theme \
     numlockx
 
@@ -652,6 +655,7 @@ chroot "$CHROOT_DIR" apt-get install -y \
 
 # ChirpStack (LoRaWAN Network Server) - install from package
 CHIRPSTACK_VERSION="4.7.0"
+mkdir -p "$CHROOT_DIR/tmp"
 wget -q -O "$CHROOT_DIR/tmp/chirpstack_${CHIRPSTACK_VERSION}_linux_amd64.deb" \
     "https://artifacts.chirpstack.io/downloads/chirpstack/chirpstack_${CHIRPSTACK_VERSION}_linux_amd64.deb" 2>/dev/null || true
 if [ -f "$CHROOT_DIR/tmp/chirpstack_${CHIRPSTACK_VERSION}_linux_amd64.deb" ]; then
@@ -667,7 +671,7 @@ chroot "$CHROOT_DIR" apt-get install -y \
     gqrx-sdr \
     rtl-sdr \
     librtlsdr-dev \
-    dump1090-mutability \
+    dump1090-fa \
     rtl-433 \
     fldigi \
     wsjtx \

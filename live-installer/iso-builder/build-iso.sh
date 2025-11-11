@@ -272,6 +272,10 @@ copy_kernel() {
         error "No kernel found in squashfs"
     fi
 
+    if [ -z "$INITRD" ]; then
+        error "No initrd found in squashfs. Try running: chroot $SQUASHFS_DIR update-initramfs -c -k all"
+    fi
+
     cp "$KERNEL" "$ISO_DIR/live/vmlinuz"
     cp "$INITRD" "$ISO_DIR/live/initrd.img"
 
