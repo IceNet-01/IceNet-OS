@@ -450,6 +450,10 @@ log "Installing Xorg and desktop packages..."
 chroot "$CHROOT_DIR" apt-get update
 chroot "$CHROOT_DIR" apt-get install -y --no-install-recommends \
     xorg \
+    xserver-xorg-video-all \
+    xserver-xorg-video-fbdev \
+    xserver-xorg-video-vesa \
+    xserver-xorg-input-all \
     openbox \
     obconf \
     tint2 \
@@ -518,12 +522,23 @@ cat > "$CHROOT_DIR/etc/lightdm/lightdm.conf" <<'EOF'
 [Seat:*]
 greeter-session=lightdm-gtk-greeter
 user-session=openbox
-autologin-user=icenet
+autologin-user=
 autologin-user-timeout=0
 EOF
 
-# Enable LightDM to start on boot
-chroot "$CHROOT_DIR" systemctl enable lightdm.service
+# Create basic Xorg config for VMs
+mkdir -p "$CHROOT_DIR/etc/X11/xorg.conf.d"
+cat > "$CHROOT_DIR/etc/X11/xorg.conf.d/10-fallback.conf" <<'EOF'
+Section "Device"
+    Identifier "Fallback Device"
+    Driver "fbdev"
+EndSection
+EOF
+
+# Don't enable LightDM by default - let user choose console or GUI
+# User can start GUI with: sudo systemctl start lightdm
+# Or enable at boot with: sudo systemctl enable lightdm
+log "Desktop installed but not auto-starting. Use 'sudo systemctl start lightdm' to launch GUI"
 
 # Apply desktop config to icenet user (since user is created before this runs)
 if [ -d "$CHROOT_DIR/home/icenet" ]; then
