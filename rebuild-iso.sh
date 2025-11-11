@@ -36,6 +36,28 @@ error() {
     exit 1
 }
 
+warning() {
+    echo -e "${YELLOW}[REBUILD]${NC} $1"
+}
+
+check_cache_status() {
+    local cache_dir="/tmp/icenet-iso-build/.cache/base-system"
+
+    if [ ! -d "$cache_dir" ]; then
+        return 1
+    fi
+
+    # Quick validation - check for essential components
+    if [ ! -f "$cache_dir/usr/bin/apt-get" ] || \
+       [ ! -f "$cache_dir/usr/sbin/update-initramfs" ] || \
+       ! ls "$cache_dir/boot/vmlinuz-"* >/dev/null 2>&1 || \
+       ! ls "$cache_dir/boot/initrd.img-"* >/dev/null 2>&1; then
+        return 1
+    fi
+
+    return 0
+}
+
 # Get script directory (repo root) - resolve symlinks
 SCRIPT_PATH="${BASH_SOURCE[0]}"
 # Follow symlinks to get real script location
@@ -78,11 +100,27 @@ else
 fi
 echo ""
 
-# Step 3: Build ISO
+# Step 3: Validate cache if using fast mode
+if [ "$FAST_MODE" = "true" ]; then
+    log "Checking cache status for fast mode..."
+    if check_cache_status; then
+        success "✓ Valid cache found - fast mode will work"
+    else
+        warning "⚠ No valid cache found!"
+        warning "Fast mode will automatically fall back to normal build"
+        warning "This first run will take 20-30 minutes to create the cache"
+        echo ""
+        warning "Press Ctrl+C to cancel, or wait 5 seconds to continue..."
+        sleep 5
+    fi
+    echo ""
+fi
+
+# Step 4: Build ISO
 if [ "$FAST_MODE" = "true" ]; then
     log "Starting FAST ISO build..."
     log "Using: Cached base system + Fast compression"
-    log "Estimated time: 5-10 minutes"
+    log "Estimated time: 5-10 minutes (or 20-30 min if cache missing)"
     echo ""
     cd "$REPO_ROOT/live-installer/iso-builder"
     if FAST_BUILD=true FAST_COMPRESSION=true ./build-iso.sh; then
@@ -121,6 +159,13 @@ if [ "$BUILD_SUCCESS" = "true" ]; then
             echo ""
             log "FAST MODE used - ISO may be larger due to gzip compression"
             log "For smaller ISO, run: sudo rebuild-iso (without --fast)"
+        else
+            # Check if cache was created
+            if check_cache_status; then
+                echo ""
+                success "✓ Cache created successfully!"
+                log "Next rebuild can use: sudo rebuild-iso --fast (5-10 minutes)"
+            fi
         fi
 
         echo ""

@@ -71,14 +71,77 @@ clean_build() {
 }
 
 # Build base system
+validate_cache() {
+    local cache_path="$1"
+
+    # Check if cache directory exists
+    if [ ! -d "$cache_path" ]; then
+        return 1
+    fi
+
+    # Check for essential directories
+    for dir in usr etc var boot lib bin sbin; do
+        if [ ! -d "$cache_path/$dir" ]; then
+            log "WARNING: Cache missing directory: $dir"
+            return 1
+        fi
+    done
+
+    # Check for critical binaries
+    for binary in usr/bin/apt-get usr/bin/dpkg usr/sbin/update-initramfs usr/bin/python3; do
+        if [ ! -f "$cache_path/$binary" ]; then
+            log "WARNING: Cache missing binary: $binary"
+            return 1
+        fi
+    done
+
+    # Check for kernel
+    if ! ls "$cache_path/boot/vmlinuz-"* >/dev/null 2>&1; then
+        log "WARNING: Cache missing kernel image"
+        return 1
+    fi
+
+    # Check for initramfs
+    if ! ls "$cache_path/boot/initrd.img-"* >/dev/null 2>&1; then
+        log "WARNING: Cache missing initramfs"
+        return 1
+    fi
+
+    # Check for live-boot components
+    if [ ! -f "$cache_path/usr/share/initramfs-tools/scripts/live" ]; then
+        log "WARNING: Cache missing live-boot components"
+        return 1
+    fi
+
+    log "✓ Cache validation passed"
+    return 0
+}
+
 build_base_system() {
     log "Building base system..."
 
     # Check for cached base system first (FAST_BUILD mode)
-    if [ "$FAST_BUILD" = "true" ] && [ -d "$CACHE_DIR/base-system" ] && [ -f "$CACHE_DIR/base-system/usr/bin/apt-get" ]; then
-        log "Using cached base system (FAST MODE)"
-        rsync -aAX "$CACHE_DIR/base-system/" "$SQUASHFS_DIR/"
-        return
+    if [ "$FAST_BUILD" = "true" ]; then
+        if [ -d "$CACHE_DIR/base-system" ]; then
+            log "Validating cached base system..."
+            if validate_cache "$CACHE_DIR/base-system"; then
+                log "Using cached base system (FAST MODE)"
+                rsync -aAX "$CACHE_DIR/base-system/" "$SQUASHFS_DIR/"
+                return
+            else
+                log "WARNING: Cache validation failed!"
+                log "WARNING: Falling back to normal build (this will take longer)"
+                log "TIP: Run a normal build first to create a valid cache"
+                sleep 3
+                # Fall through to normal build
+            fi
+        else
+            log "WARNING: No cache found at $CACHE_DIR/base-system"
+            log "WARNING: Falling back to normal build (this will take longer)"
+            log "TIP: Run a normal build first to create cache for fast mode"
+            sleep 3
+            # Fall through to normal build
+        fi
     fi
 
     # Use existing system or debootstrap
