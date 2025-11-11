@@ -122,6 +122,16 @@ build_base_system() {
 setup_default_user() {
     log "Setting up default user..."
 
+    # Set hostname
+    echo "icenet-os" > "$SQUASHFS_DIR/etc/hostname"
+
+    # Set hosts file
+    cat > "$SQUASHFS_DIR/etc/hosts" <<EOF
+127.0.0.1       localhost
+127.0.1.1       icenet-os
+::1             localhost ip6-localhost ip6-loopback
+EOF
+
     # Create icenet user
     chroot "$SQUASHFS_DIR" useradd -m -s /bin/bash -G sudo icenet
 
