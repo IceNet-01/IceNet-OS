@@ -113,6 +113,12 @@ validate_cache() {
         return 1
     fi
 
+    # Check for live-config
+    if [ ! -d "$cache_path/lib/live/config" ]; then
+        log "WARNING: Cache missing live-config"
+        return 1
+    fi
+
     log "✓ Cache validation passed"
     return 0
 }
@@ -238,6 +244,8 @@ EOF
             linux-image-amd64 \
             live-boot \
             live-boot-initramfs-tools \
+            live-config \
+            live-config-systemd \
             grub-efi-amd64-bin \
             grub-pc-bin \
             grub-common \
