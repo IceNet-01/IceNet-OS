@@ -39,6 +39,15 @@ rm -f "$CHROOT_DIR/tmp/keyboard-preseed.txt"
 # Configure non-interactive frontend to prevent all prompts
 echo 'debconf debconf/frontend select Noninteractive' | chroot "$CHROOT_DIR" debconf-set-selections
 
+# Ensure policy-rc.d exists to suppress service start warnings (if not already present)
+if [ ! -f "$CHROOT_DIR/usr/sbin/policy-rc.d" ]; then
+    cat > "$CHROOT_DIR/usr/sbin/policy-rc.d" <<'EOF'
+#!/bin/sh
+exit 101
+EOF
+    chmod +x "$CHROOT_DIR/usr/sbin/policy-rc.d"
+fi
+
 # Defer initramfs updates during package installation to avoid triggering live-boot hooks prematurely
 log "Deferring initramfs updates during installation..."
 if [ -f "$CHROOT_DIR/usr/sbin/update-initramfs" ]; then
@@ -185,6 +194,10 @@ if [ -f "$CHROOT_DIR/usr/sbin/update-initramfs.real" ]; then
     log "Regenerating initramfs with all components installed..."
     chroot "$CHROOT_DIR" update-initramfs -u -k all || log "WARNING: initramfs update had issues"
 fi
+
+# Remove policy-rc.d so services can start normally on the live system
+log "Cleaning up build policies..."
+rm -f "$CHROOT_DIR/usr/sbin/policy-rc.d"
 
 log "==================================="
 log "Minimal Base Installation Complete"

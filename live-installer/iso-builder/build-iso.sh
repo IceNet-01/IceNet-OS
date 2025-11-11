@@ -199,10 +199,26 @@ EOF
         # Configure non-interactive frontend to prevent all prompts
         echo 'debconf debconf/frontend select Noninteractive' | chroot "$SQUASHFS_DIR" debconf-set-selections
 
+        # Prevent services from starting during package installation
+        log "Configuring policy-rc.d to prevent service starts during build..."
+        cat > "$SQUASHFS_DIR/usr/sbin/policy-rc.d" <<'EOF'
+#!/bin/sh
+# Prevent services from starting during package installation
+exit 101
+EOF
+        chmod +x "$SQUASHFS_DIR/usr/sbin/policy-rc.d"
+
         chroot "$SQUASHFS_DIR" env DEBIAN_FRONTEND=noninteractive apt-get install -y \
             apt-transport-https \
             ca-certificates \
-            initramfs-tools
+            initramfs-tools \
+            locales
+
+        # Generate en_US.UTF-8 locale to prevent locale warnings
+        log "Generating en_US.UTF-8 locale..."
+        echo "en_US.UTF-8 UTF-8" > "$SQUASHFS_DIR/etc/locale.gen"
+        chroot "$SQUASHFS_DIR" locale-gen
+        chroot "$SQUASHFS_DIR" update-locale LANG=en_US.UTF-8
 
         # Now that initramfs-tools is installed, defer initramfs generation during remaining package installation
         # (we'll regenerate it properly after all packages are installed)
@@ -250,6 +266,10 @@ EOF
             log "WARNING: initramfs generation had issues, trying alternative method..."
             chroot "$SQUASHFS_DIR" dpkg-reconfigure linux-image-amd64 || true
         }
+
+        # Remove policy-rc.d so services can start normally on the live system
+        log "Removing policy-rc.d..."
+        rm -f "$SQUASHFS_DIR/usr/sbin/policy-rc.d"
 
         # Save to cache for future builds
         log "Caching base system for future builds..."
