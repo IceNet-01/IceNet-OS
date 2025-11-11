@@ -22,6 +22,23 @@ log "Installing minimal LXDE desktop environment..."
 chroot "$CHROOT_DIR" dpkg --configure -a 2>&1 || true
 chroot "$CHROOT_DIR" apt-get --fix-broken install -y 2>&1 || true
 
+# Pre-configure keyboard to avoid interactive prompts
+log "Pre-configuring keyboard layout (US)..."
+cat > "$CHROOT_DIR/tmp/keyboard-preseed.txt" <<'EOF'
+keyboard-configuration keyboard-configuration/layoutcode string us
+keyboard-configuration keyboard-configuration/layout select English (US)
+keyboard-configuration keyboard-configuration/variant select English (US)
+keyboard-configuration keyboard-configuration/model select Generic 105-key PC
+keyboard-configuration keyboard-configuration/modelcode string pc105
+keyboard-configuration keyboard-configuration/xkb-keymap select us
+console-setup console-setup/charmap47 select UTF-8
+EOF
+chroot "$CHROOT_DIR" debconf-set-selections /tmp/keyboard-preseed.txt
+rm -f "$CHROOT_DIR/tmp/keyboard-preseed.txt"
+
+# Configure non-interactive frontend to prevent all prompts
+echo 'debconf debconf/frontend select Noninteractive' | chroot "$CHROOT_DIR" debconf-set-selections
+
 # Defer initramfs updates during package installation to avoid triggering live-boot hooks prematurely
 log "Deferring initramfs updates during installation..."
 if [ -f "$CHROOT_DIR/usr/sbin/update-initramfs" ]; then
@@ -38,7 +55,7 @@ fi
 # Install LXDE and essential desktop packages
 log "Installing LXDE desktop..."
 chroot "$CHROOT_DIR" apt-get update
-chroot "$CHROOT_DIR" apt-get install -y \
+chroot "$CHROOT_DIR" env DEBIAN_FRONTEND=noninteractive apt-get install -y \
     xorg \
     xserver-xorg-video-all \
     lxde-core \
@@ -71,13 +88,13 @@ log "Installing Microsoft Edge browser..."
 wget -qO- https://packages.microsoft.com/keys/microsoft.asc | chroot "$CHROOT_DIR" gpg --dearmor > "$CHROOT_DIR/etc/apt/trusted.gpg.d/microsoft.gpg"
 echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" > "$CHROOT_DIR/etc/apt/sources.list.d/microsoft-edge.list"
 chroot "$CHROOT_DIR" apt-get update
-chroot "$CHROOT_DIR" apt-get install -y microsoft-edge-stable || log "WARNING: Edge installation failed"
+chroot "$CHROOT_DIR" env DEBIAN_FRONTEND=noninteractive apt-get install -y microsoft-edge-stable || log "WARNING: Edge installation failed"
 
 log "✓ Microsoft Edge installed"
 
 # Install SSH Server
 log "Installing OpenSSH server..."
-chroot "$CHROOT_DIR" apt-get install -y \
+chroot "$CHROOT_DIR" env DEBIAN_FRONTEND=noninteractive apt-get install -y \
     openssh-server \
     ssh
 
@@ -88,7 +105,7 @@ log "✓ SSH server installed and enabled"
 
 # Install Remote Desktop (RDP + VNC)
 log "Installing Remote Desktop services..."
-chroot "$CHROOT_DIR" apt-get install -y \
+chroot "$CHROOT_DIR" env DEBIAN_FRONTEND=noninteractive apt-get install -y \
     xrdp \
     x11vnc \
     tigervnc-standalone-server \

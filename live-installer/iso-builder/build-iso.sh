@@ -181,7 +181,25 @@ EOF
         # Install essential packages
         log "Installing essential packages (with $PARALLEL_DOWNLOADS parallel downloads)..."
         chroot "$SQUASHFS_DIR" apt-get update
-        chroot "$SQUASHFS_DIR" apt-get install -y \
+
+        # Pre-configure keyboard to avoid interactive prompts
+        log "Pre-configuring keyboard layout (US)..."
+        cat > "$SQUASHFS_DIR/tmp/keyboard-preseed.txt" <<'EOF'
+keyboard-configuration keyboard-configuration/layoutcode string us
+keyboard-configuration keyboard-configuration/layout select English (US)
+keyboard-configuration keyboard-configuration/variant select English (US)
+keyboard-configuration keyboard-configuration/model select Generic 105-key PC
+keyboard-configuration keyboard-configuration/modelcode string pc105
+keyboard-configuration keyboard-configuration/xkb-keymap select us
+console-setup console-setup/charmap47 select UTF-8
+EOF
+        chroot "$SQUASHFS_DIR" debconf-set-selections /tmp/keyboard-preseed.txt
+        rm -f "$SQUASHFS_DIR/tmp/keyboard-preseed.txt"
+
+        # Configure non-interactive frontend to prevent all prompts
+        echo 'debconf debconf/frontend select Noninteractive' | chroot "$SQUASHFS_DIR" debconf-set-selections
+
+        chroot "$SQUASHFS_DIR" env DEBIAN_FRONTEND=noninteractive apt-get install -y \
             apt-transport-https \
             ca-certificates \
             initramfs-tools
@@ -200,7 +218,7 @@ EOF
 
         # Install core packages with initramfs updates deferred
         log "Installing core packages (initramfs generation deferred)..."
-        chroot "$SQUASHFS_DIR" apt-get install -y -o Acquire::Queue-Mode=host \
+        chroot "$SQUASHFS_DIR" env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Acquire::Queue-Mode=host \
             linux-image-amd64 \
             live-boot \
             live-boot-initramfs-tools \
