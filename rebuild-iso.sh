@@ -1,6 +1,10 @@
 #!/bin/bash
 # IceNet-OS ISO Rebuild Script
 # Quick rebuild: pulls latest changes, cleans build artifacts, and rebuilds ISO
+#
+# Usage:
+#   sudo ./rebuild-iso.sh           # Normal build (best compression, ~20-30 min)
+#   sudo ./rebuild-iso.sh --fast    # Fast build (cached + fast compression, ~5-10 min)
 
 set -e
 
@@ -12,6 +16,12 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 BRANCH="claude/icenet-os-creation-011CUzS211c7Rkn4cHT5YHFQ"
+
+# Parse arguments
+FAST_MODE=false
+if [ "$1" = "--fast" ] || [ "$1" = "-f" ]; then
+    FAST_MODE=true
+fi
 
 log() {
     echo -e "${BLUE}[REBUILD]${NC} $1"
@@ -57,21 +67,43 @@ fi
 echo ""
 
 # Step 2: Clean build artifacts
-log "Cleaning old build artifacts..."
-rm -rf /tmp/icenet-iso-build
-rm -rf "$REPO_ROOT/live-installer/iso-builder/output/"*
-
-success "Build artifacts cleaned"
+if [ "$FAST_MODE" = "false" ]; then
+    log "Cleaning old build artifacts..."
+    rm -rf /tmp/icenet-iso-build
+    rm -rf "$REPO_ROOT/live-installer/iso-builder/output/"*
+    success "Build artifacts cleaned"
+else
+    log "FAST MODE: Keeping /tmp/icenet-iso-build for incremental build"
+    rm -rf "$REPO_ROOT/live-installer/iso-builder/output/"*
+fi
 echo ""
 
 # Step 3: Build ISO
-log "Starting ISO build..."
-log "This will take 15-30 minutes depending on your system"
-echo ""
+if [ "$FAST_MODE" = "true" ]; then
+    log "Starting FAST ISO build..."
+    log "Using: Cached base system + Fast compression"
+    log "Estimated time: 5-10 minutes"
+    echo ""
+    cd "$REPO_ROOT/live-installer/iso-builder"
+    if FAST_BUILD=true FAST_COMPRESSION=true ./build-iso.sh; then
+        BUILD_SUCCESS=true
+    else
+        BUILD_SUCCESS=false
+    fi
+else
+    log "Starting NORMAL ISO build..."
+    log "Using: Fresh debootstrap + Best compression"
+    log "Estimated time: 20-30 minutes"
+    echo ""
+    cd "$REPO_ROOT/live-installer/iso-builder"
+    if ./build-iso.sh; then
+        BUILD_SUCCESS=true
+    else
+        BUILD_SUCCESS=false
+    fi
+fi
 
-cd "$REPO_ROOT/live-installer/iso-builder"
-
-if ./build-iso.sh; then
+if [ "$BUILD_SUCCESS" = "true" ]; then
     echo ""
     success "========================================="
     success "ISO REBUILD COMPLETE!"
@@ -84,12 +116,22 @@ if ./build-iso.sh; then
         ISO_SIZE=$(du -h "$ISO_FILE" | cut -f1)
         success "ISO Location: $ISO_FILE"
         success "ISO Size: $ISO_SIZE"
+
+        if [ "$FAST_MODE" = "true" ]; then
+            echo ""
+            log "FAST MODE used - ISO may be larger due to gzip compression"
+            log "For smaller ISO, run: sudo rebuild-iso (without --fast)"
+        fi
+
         echo ""
         log "To test in VM:"
         echo "  qemu-system-x86_64 -m 2G -cdrom $ISO_FILE -boot d"
         echo ""
         log "To write to USB:"
         echo "  sudo dd if=$ISO_FILE of=/dev/sdX bs=4M status=progress"
+        echo ""
+        log "For faster rebuilds next time:"
+        echo "  sudo rebuild-iso --fast    (5-10 min using cache)"
     fi
 else
     error "ISO build failed - check output above for errors"

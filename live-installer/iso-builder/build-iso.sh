@@ -10,9 +10,15 @@ BUILD_DIR="/tmp/icenet-iso-build"
 ISO_DIR="$BUILD_DIR/iso"
 SQUASHFS_DIR="$BUILD_DIR/squashfs"
 OUTPUT_DIR="$SCRIPT_DIR/output"
+CACHE_DIR="$SCRIPT_DIR/cache"  # Cache directory for base system
 
 # ISO naming with timestamp to prevent collisions
 ISO_NAME="icenet-os-$(date +%Y%m%d-%H%M%S).iso"
+
+# Build options (can be overridden with environment variables)
+FAST_BUILD="${FAST_BUILD:-false}"        # Skip debootstrap if cache exists
+FAST_COMPRESSION="${FAST_COMPRESSION:-false}"  # Use gzip instead of xz
+PARALLEL_DOWNLOADS="${PARALLEL_DOWNLOADS:-4}"  # Parallel apt downloads
 
 # Colors
 RED='\033[0;31m'
@@ -68,6 +74,13 @@ clean_build() {
 build_base_system() {
     log "Building base system..."
 
+    # Check for cached base system first (FAST_BUILD mode)
+    if [ "$FAST_BUILD" = "true" ] && [ -d "$CACHE_DIR/base-system" ] && [ -f "$CACHE_DIR/base-system/usr/bin/apt-get" ]; then
+        log "Using cached base system (FAST MODE)"
+        rsync -aAX "$CACHE_DIR/base-system/" "$SQUASHFS_DIR/"
+        return
+    fi
+
     # Use existing system or debootstrap
     if [ -d "/live/rootfs" ] && [ -f "/live/rootfs/usr/bin/apt-get" ]; then
         log "Using existing live system"
@@ -92,10 +105,25 @@ build_base_system() {
         debootstrap --arch=amd64 --variant=minbase \
             bookworm "$SQUASHFS_DIR" "$DEBIAN_MIRROR"
 
+        # Enable parallel downloads in apt
+        log "Configuring parallel downloads..."
+        mkdir -p "$SQUASHFS_DIR/etc/apt/apt.conf.d"
+        cat > "$SQUASHFS_DIR/etc/apt/apt.conf.d/99parallel" <<EOF
+APT::Acquire::Queue-Mode "host";
+APT::Acquire::Retries "3";
+Binary::apt::APT::Get::Assume-Yes "true";
+Binary::apt::APT::Get::force-yes "true";
+EOF
+
         # Install essential packages
-        log "Installing essential packages..."
+        log "Installing essential packages (with $PARALLEL_DOWNLOADS parallel downloads)..."
         chroot "$SQUASHFS_DIR" apt-get update
         chroot "$SQUASHFS_DIR" apt-get install -y \
+            apt-transport-https \
+            ca-certificates
+
+        # Install core packages
+        chroot "$SQUASHFS_DIR" apt-get install -y -o Acquire::Queue-Mode=host \
             linux-image-amd64 \
             live-boot \
             live-boot-initramfs-tools \
@@ -113,6 +141,13 @@ build_base_system() {
             isolinux \
             systemd \
             systemd-sysv
+
+        # Save to cache for future builds
+        log "Caching base system for future builds..."
+        mkdir -p "$CACHE_DIR"
+        rm -rf "$CACHE_DIR/base-system"
+        rsync -aAX "$SQUASHFS_DIR/" "$CACHE_DIR/base-system/"
+        log "Base system cached to $CACHE_DIR/base-system"
     fi
 
     log "Base system ready"
@@ -249,13 +284,23 @@ create_squashfs() {
         fi
     fi
 
-    # Create squashfs with progress indicator
-    mksquashfs "$SQUASHFS_DIR" "$ISO_DIR/live/filesystem.squashfs" \
-        -comp xz \
-        -b 1M \
-        -Xdict-size 100% \
-        -noappend \
-        -progress
+    # Create squashfs with compression based on build mode
+    if [ "$FAST_COMPRESSION" = "true" ]; then
+        log "Using FAST compression (gzip) - larger ISO but 3x faster"
+        mksquashfs "$SQUASHFS_DIR" "$ISO_DIR/live/filesystem.squashfs" \
+            -comp gzip \
+            -b 1M \
+            -noappend \
+            -progress
+    else
+        log "Using BEST compression (xz) - smaller ISO but slower"
+        mksquashfs "$SQUASHFS_DIR" "$ISO_DIR/live/filesystem.squashfs" \
+            -comp xz \
+            -b 1M \
+            -Xdict-size 100% \
+            -noappend \
+            -progress
+    fi
 
     log "Squashfs created: $(du -h "$ISO_DIR/live/filesystem.squashfs" | cut -f1)"
 }
