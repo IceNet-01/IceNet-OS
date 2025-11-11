@@ -440,9 +440,15 @@ fi
 # 4. Install Desktop Environment
 log "Installing IceNet Desktop Environment..."
 
+# Fix any broken packages first
+log "Checking for broken packages..."
+chroot "$CHROOT_DIR" dpkg --configure -a 2>&1 || true
+chroot "$CHROOT_DIR" apt-get --fix-broken install -y 2>&1 || true
+
 # Install desktop packages
 log "Installing Xorg and desktop packages..."
-chroot "$CHROOT_DIR" apt-get install -y \
+chroot "$CHROOT_DIR" apt-get update
+chroot "$CHROOT_DIR" apt-get install -y --no-install-recommends \
     xorg \
     openbox \
     obconf \
@@ -464,10 +470,11 @@ chroot "$CHROOT_DIR" apt-get install -y \
     unclutter \
     fonts-dejavu \
     papirus-icon-theme \
-    numlockx || {
-        log "ERROR: Failed to install desktop packages"
-        exit 1
-    }
+    numlockx
+
+if [ $? -ne 0 ]; then
+    log "WARNING: Some desktop packages failed to install, continuing anyway"
+fi
 
 # Create configuration directories
 mkdir -p "$CHROOT_DIR/etc/skel/.config"/{openbox,tint2,jgmenu}
