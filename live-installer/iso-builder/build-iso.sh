@@ -223,19 +223,19 @@ EOF
     log "Live boot components installed"
 }
 
-# Pre-install integrations
-pre_install_integrations() {
-    log "Pre-installing IceNet integrations..."
+# Install minimal base (LXDE + Edge + SSH/RDP + Software Center)
+install_minimal_base() {
+    log "Installing minimal base system..."
 
-    if [ -f "$SCRIPT_DIR/pre-install-integrations.sh" ]; then
-        bash "$SCRIPT_DIR/pre-install-integrations.sh" \
+    if [ -f "$SCRIPT_DIR/install-minimal-base.sh" ]; then
+        bash "$SCRIPT_DIR/install-minimal-base.sh" \
             "$SQUASHFS_DIR" \
             "$SCRIPT_DIR/../../integrations"
     else
-        warning "Pre-install script not found, skipping"
+        warning "Minimal base installer not found, skipping"
     fi
 
-    log "Integrations pre-installed"
+    log "Minimal base installed"
 }
 
 # Create squashfs
@@ -357,7 +357,7 @@ main() {
     setup_default_user
     install_icenet_components
     install_live_components
-    pre_install_integrations
+    install_minimal_base
     create_squashfs
     copy_kernel
     create_grub_config
