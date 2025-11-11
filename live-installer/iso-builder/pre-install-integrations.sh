@@ -325,6 +325,7 @@ import sys
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib
+import subprocess
 
 class MeshBridgeGUI(Gtk.Window):
     def __init__(self):
@@ -332,29 +333,145 @@ class MeshBridgeGUI(Gtk.Window):
         self.set_default_size(700, 500)
         self.set_position(Gtk.WindowPosition.CENTER)
 
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        box.set_margin_start(20)
-        box.set_margin_end(20)
-        box.set_margin_top(20)
-        box.set_margin_bottom(20)
-        self.add(box)
+        # Main vertical box
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        main_box.set_margin_start(20)
+        main_box.set_margin_end(20)
+        main_box.set_margin_top(20)
+        main_box.set_margin_bottom(20)
+        self.add(main_box)
 
         # Header
         header = Gtk.Label()
         header.set_markup("<span size='x-large' weight='bold'>Mesh Bridge Configuration</span>")
-        box.pack_start(header, False, False, 0)
+        main_box.pack_start(header, False, False, 0)
 
-        # Placeholder content
-        content = Gtk.Label()
-        content.set_markup(
-            "<span size='large'>Configure your Meshtastic mesh network bridge</span>\n\n"
-            "This interface allows you to:\n"
-            "• Monitor connected radios\n"
-            "• Configure bridge settings\n"
-            "• View message traffic\n"
-            "• Manage network topology"
+        # Info section
+        info_frame = Gtk.Frame(label="Bridge Information")
+        info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        info_box.set_margin_start(10)
+        info_box.set_margin_end(10)
+        info_box.set_margin_top(10)
+        info_box.set_margin_bottom(10)
+        info_frame.add(info_box)
+        main_box.pack_start(info_frame, True, True, 0)
+
+        self.status_label = Gtk.Label()
+        self.status_label.set_markup("<b>Status:</b> Checking...")
+        self.status_label.set_xalign(0)
+        info_box.pack_start(self.status_label, False, False, 0)
+
+        info_text = Gtk.Label()
+        info_text.set_markup(
+            "\nThis interface manages the Meshtastic mesh network bridge.\n\n"
+            "<b>Features:</b>\n"
+            "• Monitor connected Meshtastic radios\n"
+            "• View bridge service status\n"
+            "• Start/stop bridge service\n"
+            "• Check system logs"
         )
-        box.pack_start(content, True, True, 0)
+        info_text.set_xalign(0)
+        info_box.pack_start(info_text, True, True, 0)
+
+        # Button box
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        button_box.set_halign(Gtk.Align.CENTER)
+        main_box.pack_start(button_box, False, False, 0)
+
+        # Start button
+        start_btn = Gtk.Button(label="Start Bridge")
+        start_btn.connect("clicked", self.on_start_clicked)
+        button_box.pack_start(start_btn, False, False, 0)
+
+        # Stop button
+        stop_btn = Gtk.Button(label="Stop Bridge")
+        stop_btn.connect("clicked", self.on_stop_clicked)
+        button_box.pack_start(stop_btn, False, False, 0)
+
+        # Status button
+        status_btn = Gtk.Button(label="Check Status")
+        status_btn.connect("clicked", self.on_status_clicked)
+        button_box.pack_start(status_btn, False, False, 0)
+
+        # Logs button
+        logs_btn = Gtk.Button(label="View Logs")
+        logs_btn.connect("clicked", self.on_logs_clicked)
+        button_box.pack_start(logs_btn, False, False, 0)
+
+        # Check initial status
+        GLib.timeout_add_seconds(1, self.update_status)
+
+    def run_command(self, cmd):
+        """Run command safely"""
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            return result.returncode == 0, result.stdout, result.stderr
+        except Exception as e:
+            return False, "", str(e)
+
+    def update_status(self):
+        """Update service status"""
+        success, stdout, _ = self.run_command(['systemctl', 'is-active', 'meshtastic-bridge.service'])
+        if success and 'active' in stdout:
+            self.status_label.set_markup("<b>Status:</b> <span color='green'>Running</span>")
+        else:
+            self.status_label.set_markup("<b>Status:</b> <span color='red'>Stopped</span>")
+        return False
+
+    def on_start_clicked(self, button):
+        """Start bridge service"""
+        success, _, error = self.run_command(['pkexec', 'systemctl', 'start', 'meshtastic-bridge.service'])
+        if success:
+            self.show_dialog("Bridge Started", "Meshtastic bridge service has been started")
+            self.update_status()
+        else:
+            self.show_dialog("Error", f"Failed to start bridge:\n{error}")
+
+    def on_stop_clicked(self, button):
+        """Stop bridge service"""
+        success, _, error = self.run_command(['pkexec', 'systemctl', 'stop', 'meshtastic-bridge.service'])
+        if success:
+            self.show_dialog("Bridge Stopped", "Meshtastic bridge service has been stopped")
+            self.update_status()
+        else:
+            self.show_dialog("Error", f"Failed to stop bridge:\n{error}")
+
+    def on_status_clicked(self, button):
+        """Show detailed status"""
+        _, stdout, _ = self.run_command(['systemctl', 'status', 'meshtastic-bridge.service'])
+        dialog = Gtk.MessageDialog(
+            parent=self,
+            flags=0,
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            text="Bridge Service Status"
+        )
+        dialog.format_secondary_text(stdout[:500])
+        dialog.run()
+        dialog.destroy()
+        self.update_status()
+
+    def on_logs_clicked(self, button):
+        """View logs in terminal"""
+        subprocess.Popen(['lxterminal', '-e', 'journalctl', '-u', 'meshtastic-bridge.service', '-f'])
+
+    def show_dialog(self, title, message):
+        """Show simple dialog"""
+        dialog = Gtk.MessageDialog(
+            parent=self,
+            flags=0,
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            text=title
+        )
+        dialog.format_secondary_text(message)
+        dialog.run()
+        dialog.destroy()
 
 def main():
     """Main entry point with error handling"""
@@ -480,6 +597,7 @@ chroot "$CHROOT_DIR" apt-get install -y --no-install-recommends \
     xserver-xorg-video-vesa \
     xserver-xorg-input-all \
     openbox \
+    openbox-themes \
     obconf \
     tint2 \
     jgmenu \
@@ -628,6 +746,19 @@ Categories=Network;Communication;
 Keywords=reticulum;lxmf;messaging;
 StartupNotify=true
 EOF
+
+# Ensure /usr/local/bin is in PATH for all users
+cat >> "$CHROOT_DIR/etc/profile.d/local-bin-path.sh" <<'EOF'
+# Add /usr/local/bin to PATH if not already present
+case ":${PATH}:" in
+    *:/usr/local/bin:*)
+        ;;
+    *)
+        export PATH="/usr/local/bin:$PATH"
+        ;;
+esac
+EOF
+chmod +x "$CHROOT_DIR/etc/profile.d/local-bin-path.sh"
 
 log "✓ Reticulum stack installed (nomadnet, sideband, lxmf)"
 
