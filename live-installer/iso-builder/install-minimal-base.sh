@@ -53,11 +53,7 @@ chroot "$CHROOT_DIR" apt-get install -y \
 
 log "✓ LXDE desktop installed"
 
-# Install GPG tools needed for package signing
-log "Installing GPG tools..."
-chroot "$CHROOT_DIR" apt-get install -y gnupg wget ca-certificates
-
-# Install Microsoft Edge
+# Install Microsoft Edge (gnupg and wget already in base system)
 log "Installing Microsoft Edge browser..."
 wget -qO- https://packages.microsoft.com/keys/microsoft.asc | chroot "$CHROOT_DIR" gpg --dearmor > "$CHROOT_DIR/etc/apt/trusted.gpg.d/microsoft.gpg"
 echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" > "$CHROOT_DIR/etc/apt/sources.list.d/microsoft-edge.list"

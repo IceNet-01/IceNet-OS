@@ -217,7 +217,9 @@ EOF
             xorriso \
             isolinux \
             systemd \
-            systemd-sysv
+            systemd-sysv \
+            gnupg \
+            wget
 
         # Restore update-initramfs and regenerate properly
         log "Restoring initramfs generation..."
