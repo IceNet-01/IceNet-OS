@@ -183,22 +183,22 @@ EOF
         chroot "$SQUASHFS_DIR" apt-get update
         chroot "$SQUASHFS_DIR" apt-get install -y \
             apt-transport-https \
-            ca-certificates
+            ca-certificates \
+            initramfs-tools
 
-        # Prevent initramfs generation during package installation
+        # Now that initramfs-tools is installed, defer initramfs generation during remaining package installation
         # (we'll regenerate it properly after all packages are installed)
         log "Configuring initramfs to defer updates..."
-        cat > "$SQUASHFS_DIR/usr/sbin/update-initramfs.disabled" <<'EOF'
+        mv "$SQUASHFS_DIR/usr/sbin/update-initramfs" "$SQUASHFS_DIR/usr/sbin/update-initramfs.real"
+        cat > "$SQUASHFS_DIR/usr/sbin/update-initramfs" <<'EOF'
 #!/bin/sh
 # Temporarily disabled during package installation
 echo "update-initramfs: deferred (will regenerate after package installation)"
 exit 0
 EOF
-        chmod +x "$SQUASHFS_DIR/usr/sbin/update-initramfs.disabled"
-        [ -f "$SQUASHFS_DIR/usr/sbin/update-initramfs" ] && mv "$SQUASHFS_DIR/usr/sbin/update-initramfs" "$SQUASHFS_DIR/usr/sbin/update-initramfs.real" || true
-        ln -sf /usr/sbin/update-initramfs.disabled "$SQUASHFS_DIR/usr/sbin/update-initramfs"
+        chmod +x "$SQUASHFS_DIR/usr/sbin/update-initramfs"
 
-        # Install core packages
+        # Install core packages with initramfs updates deferred
         log "Installing core packages (initramfs generation deferred)..."
         chroot "$SQUASHFS_DIR" apt-get install -y -o Acquire::Queue-Mode=host \
             linux-image-amd64 \
@@ -221,11 +221,10 @@ EOF
             gnupg \
             wget
 
-        # Restore update-initramfs and regenerate properly
+        # Restore real update-initramfs and regenerate properly
         log "Restoring initramfs generation..."
         rm -f "$SQUASHFS_DIR/usr/sbin/update-initramfs"
-        [ -f "$SQUASHFS_DIR/usr/sbin/update-initramfs.real" ] && mv "$SQUASHFS_DIR/usr/sbin/update-initramfs.real" "$SQUASHFS_DIR/usr/sbin/update-initramfs" || true
-        rm -f "$SQUASHFS_DIR/usr/sbin/update-initramfs.disabled"
+        mv "$SQUASHFS_DIR/usr/sbin/update-initramfs.real" "$SQUASHFS_DIR/usr/sbin/update-initramfs"
 
         # Now regenerate initramfs with all packages in place
         log "Generating initramfs..."

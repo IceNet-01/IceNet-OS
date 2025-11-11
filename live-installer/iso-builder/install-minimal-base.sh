@@ -22,6 +22,19 @@ log "Installing minimal LXDE desktop environment..."
 chroot "$CHROOT_DIR" dpkg --configure -a 2>&1 || true
 chroot "$CHROOT_DIR" apt-get --fix-broken install -y 2>&1 || true
 
+# Defer initramfs updates during package installation to avoid triggering live-boot hooks prematurely
+log "Deferring initramfs updates during installation..."
+if [ -f "$CHROOT_DIR/usr/sbin/update-initramfs" ]; then
+    mv "$CHROOT_DIR/usr/sbin/update-initramfs" "$CHROOT_DIR/usr/sbin/update-initramfs.real"
+    cat > "$CHROOT_DIR/usr/sbin/update-initramfs" <<'EOF'
+#!/bin/sh
+# Temporarily disabled during minimal base installation
+echo "update-initramfs: deferred (minimal base installation in progress)"
+exit 0
+EOF
+    chmod +x "$CHROOT_DIR/usr/sbin/update-initramfs"
+fi
+
 # Install LXDE and essential desktop packages
 log "Installing LXDE desktop..."
 chroot "$CHROOT_DIR" apt-get update
@@ -146,6 +159,15 @@ case ":${PATH}:" in
 esac
 EOF
 chmod +x "$CHROOT_DIR/etc/profile.d/local-bin-path.sh"
+
+# Restore real update-initramfs and regenerate if needed
+log "Restoring initramfs updates..."
+if [ -f "$CHROOT_DIR/usr/sbin/update-initramfs.real" ]; then
+    rm -f "$CHROOT_DIR/usr/sbin/update-initramfs"
+    mv "$CHROOT_DIR/usr/sbin/update-initramfs.real" "$CHROOT_DIR/usr/sbin/update-initramfs"
+    log "Regenerating initramfs with all components installed..."
+    chroot "$CHROOT_DIR" update-initramfs -u -k all || log "WARNING: initramfs update had issues"
+fi
 
 log "==================================="
 log "Minimal Base Installation Complete"
