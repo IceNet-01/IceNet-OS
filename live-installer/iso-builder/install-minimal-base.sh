@@ -151,6 +151,10 @@ log "Creating default user (icenet/icenet)..."
 chroot "$CHROOT_DIR" useradd -m -s /bin/bash -G sudo,netdev,plugdev icenet || true
 echo "icenet:icenet" | chroot "$CHROOT_DIR" chpasswd
 
+# Ensure home directory permissions are correct
+chroot "$CHROOT_DIR" chown -R icenet:icenet /home/icenet
+chroot "$CHROOT_DIR" chmod 755 /home/icenet
+
 # Allow sudo without password for convenience
 echo "icenet ALL=(ALL) NOPASSWD:ALL" > "$CHROOT_DIR/etc/sudoers.d/icenet"
 chmod 0440 "$CHROOT_DIR/etc/sudoers.d/icenet"
@@ -164,7 +168,49 @@ cat > "$CHROOT_DIR/etc/lightdm/lightdm.conf.d/50-autologin.conf" <<'EOF'
 [Seat:*]
 autologin-user=icenet
 autologin-user-timeout=0
+EOF
+
+# Create .dmrc for session selection (backup method)
+cat > "$CHROOT_DIR/home/icenet/.dmrc" <<'EOF'
+[Desktop]
+Session=LXDE
+EOF
+chroot "$CHROOT_DIR" chown icenet:icenet /home/icenet/.dmrc
+chroot "$CHROOT_DIR" chmod 644 /home/icenet/.dmrc
+
+# Create .xsession as fallback
+cat > "$CHROOT_DIR/home/icenet/.xsession" <<'EOF'
+#!/bin/sh
+exec startlxde
+EOF
+chroot "$CHROOT_DIR" chown icenet:icenet /home/icenet/.xsession
+chroot "$CHROOT_DIR" chmod +x /home/icenet/.xsession
+
+# Configure LightDM main config
+mkdir -p "$CHROOT_DIR/etc/lightdm"
+cat > "$CHROOT_DIR/etc/lightdm/lightdm.conf" <<'EOF'
+[Seat:*]
+greeter-session=lightdm-gtk-greeter
 user-session=LXDE
+autologin-user=icenet
+autologin-user-timeout=0
+greeter-hide-users=false
+allow-guest=false
+
+[LightDM]
+run-directory=/run/lightdm
+EOF
+
+# Create systemd override to ensure lightdm starts properly
+mkdir -p "$CHROOT_DIR/etc/systemd/system/lightdm.service.d"
+cat > "$CHROOT_DIR/etc/systemd/system/lightdm.service.d/override.conf" <<'EOF'
+[Unit]
+After=systemd-user-sessions.service plymouth-quit.service
+Wants=systemd-user-sessions.service
+
+[Service]
+Restart=on-failure
+RestartSec=1
 EOF
 
 # Enable lightdm
