@@ -164,28 +164,61 @@ class ServiceControlPanel(Gtk.Window):
 
         return frame
 
-    def run_command(self, command):
-        """Run a system command"""
+    def run_command(self, command_args):
+        """
+        Run a system command safely without shell=True.
+
+        Args:
+            command_args: List of command arguments or single command string
+
+        Returns:
+            Tuple of (success: bool, stdout: str, stderr: str)
+        """
         try:
+            # Convert to list if needed
+            if isinstance(command_args, str):
+                command_args = command_args.split()
+
             result = subprocess.run(
-                command,
-                shell=True,
+                command_args,
+                shell=False,  # SECURITY: Never use shell=True
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=10  # Prevent hanging
             )
             return result.returncode == 0, result.stdout, result.stderr
+        except subprocess.TimeoutExpired:
+            return False, "", "Command timed out"
         except Exception as e:
             return False, "", str(e)
 
     def is_service_enabled(self, service_name):
-        """Check if service is enabled"""
-        success, stdout, _ = self.run_command(f"systemctl is-enabled {service_name} 2>/dev/null")
-        return "enabled" in stdout
+        """
+        Check if service is enabled at boot.
+
+        Args:
+            service_name: Name of the systemd service
+
+        Returns:
+            bool: True if enabled, False otherwise
+        """
+        success, stdout, _ = self.run_command(['systemctl', 'is-enabled', service_name])
+        # Check both success AND stdout content
+        return success and "enabled" in stdout.lower()
 
     def is_service_active(self, service_name):
-        """Check if service is currently running"""
-        success, stdout, _ = self.run_command(f"systemctl is-active {service_name} 2>/dev/null")
-        return "active" in stdout
+        """
+        Check if service is currently running.
+
+        Args:
+            service_name: Name of the systemd service
+
+        Returns:
+            bool: True if active, False otherwise
+        """
+        success, stdout, _ = self.run_command(['systemctl', 'is-active', service_name])
+        # Check both success AND stdout content
+        return success and "active" in stdout.lower()
 
     def refresh_service_states(self):
         """Refresh the state of all services"""
@@ -226,51 +259,108 @@ class ServiceControlPanel(Gtk.Window):
     def enable_service(self, service):
         """Enable service at boot"""
         service_name = service['service']
-        success, _, error = self.run_command(f"pkexec systemctl enable {service_name}")
+        success, _, error = self.run_command(['pkexec', 'systemctl', 'enable', service_name])
 
         if success:
-            self.show_notification(f"{service['name']} enabled", "Service will start at boot")
+            self.show_notification(
+                f"{service['name']} enabled",
+                "Service will start automatically at next boot"
+            )
             self.refresh_service_states()
         else:
-            self.show_error(f"Failed to enable {service['name']}", error)
+            # Provide more specific error messages
+            if "Permission denied" in error or "Authentication" in error:
+                self.show_error(
+                    "Permission Denied",
+                    f"You don't have permission to enable {service['name']}.\n\n"
+                    "Authentication via PolicyKit is required."
+                )
+            elif "not found" in error.lower():
+                self.show_error(
+                    "Service Not Found",
+                    f"The {service['name']} service is not installed.\n"
+                    f"Service: {service_name}"
+                )
+            else:
+                self.show_error(f"Failed to enable {service['name']}", error)
             service['switch'].set_active(False)
 
     def disable_service(self, service):
         """Disable service at boot"""
         service_name = service['service']
-        success, _, error = self.run_command(f"pkexec systemctl disable {service_name}")
+        success, _, error = self.run_command(['pkexec', 'systemctl', 'disable', service_name])
 
         if success:
-            self.show_notification(f"{service['name']} disabled", "Service will not start at boot")
+            self.show_notification(
+                f"{service['name']} disabled",
+                "Service will not start automatically at boot"
+            )
             self.refresh_service_states()
         else:
-            self.show_error(f"Failed to disable {service['name']}", error)
+            if "Permission denied" in error or "Authentication" in error:
+                self.show_error(
+                    "Permission Denied",
+                    f"You don't have permission to disable {service['name']}."
+                )
+            else:
+                self.show_error(f"Failed to disable {service['name']}", error)
             service['switch'].set_active(True)
 
     def on_start_service(self, button, service):
         """Start service now"""
         service_name = service['service']
-        success, _, error = self.run_command(f"pkexec systemctl start {service_name}")
+        success, _, error = self.run_command(['pkexec', 'systemctl', 'start', service_name])
 
         if success:
-            self.show_notification(f"{service['name']} started", "Service is now running")
+            self.show_notification(
+                f"{service['name']} started",
+                "Service is now running"
+            )
             GLib.timeout_add_seconds(1, self.refresh_service_states)
         else:
-            self.show_error(f"Failed to start {service['name']}", error)
+            if "already" in error.lower():
+                self.show_notification(
+                    f"{service['name']} already running",
+                    "Service was already started"
+                )
+            elif service_name == "icenet-thermal.service":
+                # Check journal for thermal zone error
+                _, journal_out, _ = self.run_command(['journalctl', '-u', service_name, '-n', '20', '--no-pager'])
+                if "No thermal zones found" in journal_out or "thermal zone not found" in journal_out.lower():
+                    self.show_error(
+                        "Thermal Service Not Supported",
+                        "This system has no thermal sensors (common in VMs).\n\n"
+                        "The thermal management service is designed for physical hardware "
+                        "in cold environments.\n\n"
+                        "This service is not needed for your system."
+                    )
+                else:
+                    self.show_error(f"Failed to start {service['name']}", error)
+            else:
+                self.show_error(f"Failed to start {service['name']}", error)
 
     def on_stop_service(self, button, service):
         """Stop service now"""
         service_name = service['service']
-        success, _, error = self.run_command(f"pkexec systemctl stop {service_name}")
+        success, _, error = self.run_command(['pkexec', 'systemctl', 'stop', service_name])
 
         if success:
-            self.show_notification(f"{service['name']} stopped", "Service has been stopped")
+            self.show_notification(
+                f"{service['name']} stopped",
+                "Service has been stopped"
+            )
             GLib.timeout_add_seconds(1, self.refresh_service_states)
         else:
-            self.show_error(f"Failed to stop {service['name']}", error)
+            if "not loaded" in error.lower() or "not running" in error.lower():
+                self.show_notification(
+                    f"{service['name']} not running",
+                    "Service was already stopped"
+                )
+            else:
+                self.show_error(f"Failed to stop {service['name']}", error)
 
     def show_notification(self, title, message):
-        """Show notification dialog"""
+        """Show notification dialog with proper cleanup"""
         dialog = Gtk.MessageDialog(
             transient_for=self,
             message_type=Gtk.MessageType.INFO,
@@ -278,11 +368,13 @@ class ServiceControlPanel(Gtk.Window):
             text=title
         )
         dialog.format_secondary_text(message)
-        dialog.run()
-        dialog.destroy()
+        try:
+            dialog.run()
+        finally:
+            dialog.destroy()
 
     def show_error(self, title, message):
-        """Show error dialog"""
+        """Show error dialog with proper cleanup"""
         dialog = Gtk.MessageDialog(
             transient_for=self,
             message_type=Gtk.MessageType.ERROR,
@@ -290,8 +382,10 @@ class ServiceControlPanel(Gtk.Window):
             text=title
         )
         dialog.format_secondary_text(message)
-        dialog.run()
-        dialog.destroy()
+        try:
+            dialog.run()
+        finally:
+            dialog.destroy()
 
 def main():
     win = ServiceControlPanel()

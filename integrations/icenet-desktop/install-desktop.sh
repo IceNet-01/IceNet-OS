@@ -69,7 +69,7 @@ install_packages() {
             galculator \
             lxrandr \
             dunst \
-            clipit \
+            diodon \
             unclutter \
             fonts-dejavu \
             papirus-icon-theme \
@@ -95,7 +95,7 @@ install_packages() {
             galculator \
             lxrandr \
             dunst \
-            clipit \
+            diodon \
             unclutter \
             ttf-dejavu \
             papirus-icon-theme \

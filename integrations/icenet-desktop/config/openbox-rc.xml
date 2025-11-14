@@ -24,8 +24,8 @@
   </placement>
 
   <theme>
-    <name>IceNet-Dark</name>
-    <titleLayout>NLIMC</titleLayout>
+    <name>Clearlooks</name>
+    <titleLayout>NDSLIMC</titleLayout>
     <keepBorder>yes</keepBorder>
     <animateIconify>yes</animateIconify>
     <font place="ActiveWindow">

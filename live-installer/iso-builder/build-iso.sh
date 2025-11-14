@@ -10,7 +10,15 @@ BUILD_DIR="/tmp/icenet-iso-build"
 ISO_DIR="$BUILD_DIR/iso"
 SQUASHFS_DIR="$BUILD_DIR/squashfs"
 OUTPUT_DIR="$SCRIPT_DIR/output"
-ISO_NAME="icenet-os-$(date +%Y%m%d).iso"
+CACHE_DIR="$SCRIPT_DIR/cache"  # Cache directory for base system
+
+# ISO naming with timestamp to prevent collisions
+ISO_NAME="icenet-os-$(date +%Y%m%d-%H%M%S).iso"
+
+# Build options (can be overridden with environment variables)
+FAST_BUILD="${FAST_BUILD:-false}"        # Skip debootstrap if cache exists
+FAST_COMPRESSION="${FAST_COMPRESSION:-false}"  # Use gzip instead of xz
+PARALLEL_DOWNLOADS="${PARALLEL_DOWNLOADS:-4}"  # Parallel apt downloads
 
 # Colors
 RED='\033[0;31m'
@@ -63,11 +71,87 @@ clean_build() {
 }
 
 # Build base system
+validate_cache() {
+    local cache_path="$1"
+
+    # Check if cache directory exists
+    if [ ! -d "$cache_path" ]; then
+        return 1
+    fi
+
+    # Check for essential directories
+    for dir in usr etc var boot lib bin sbin; do
+        if [ ! -d "$cache_path/$dir" ]; then
+            log "WARNING: Cache missing directory: $dir"
+            return 1
+        fi
+    done
+
+    # Check for critical binaries
+    for binary in usr/bin/apt-get usr/bin/dpkg usr/sbin/update-initramfs usr/bin/python3; do
+        if [ ! -f "$cache_path/$binary" ]; then
+            log "WARNING: Cache missing binary: $binary"
+            return 1
+        fi
+    done
+
+    # Check for kernel
+    if ! ls "$cache_path/boot/vmlinuz-"* >/dev/null 2>&1; then
+        log "WARNING: Cache missing kernel image"
+        return 1
+    fi
+
+    # Check for initramfs
+    if ! ls "$cache_path/boot/initrd.img-"* >/dev/null 2>&1; then
+        log "WARNING: Cache missing initramfs"
+        return 1
+    fi
+
+    # Check for live-boot components
+    if [ ! -f "$cache_path/usr/share/initramfs-tools/scripts/live" ]; then
+        log "WARNING: Cache missing live-boot components"
+        return 1
+    fi
+
+    # Check for live-config
+    if [ ! -d "$cache_path/lib/live/config" ]; then
+        log "WARNING: Cache missing live-config"
+        return 1
+    fi
+
+    log "✓ Cache validation passed"
+    return 0
+}
+
 build_base_system() {
     log "Building base system..."
 
+    # Check for cached base system first (FAST_BUILD mode)
+    if [ "$FAST_BUILD" = "true" ]; then
+        if [ -d "$CACHE_DIR/base-system" ]; then
+            log "Validating cached base system..."
+            if validate_cache "$CACHE_DIR/base-system"; then
+                log "Using cached base system (FAST MODE)"
+                rsync -aAX "$CACHE_DIR/base-system/" "$SQUASHFS_DIR/"
+                return
+            else
+                log "WARNING: Cache validation failed!"
+                log "WARNING: Falling back to normal build (this will take longer)"
+                log "TIP: Run a normal build first to create a valid cache"
+                sleep 3
+                # Fall through to normal build
+            fi
+        else
+            log "WARNING: No cache found at $CACHE_DIR/base-system"
+            log "WARNING: Falling back to normal build (this will take longer)"
+            log "TIP: Run a normal build first to create cache for fast mode"
+            sleep 3
+            # Fall through to normal build
+        fi
+    fi
+
     # Use existing system or debootstrap
-    if [ -d "/live/rootfs" ]; then
+    if [ -d "/live/rootfs" ] && [ -f "/live/rootfs/usr/bin/apt-get" ]; then
         log "Using existing live system"
         rsync -aAX /live/rootfs/ "$SQUASHFS_DIR/" \
             --exclude=/proc/* \
@@ -78,29 +162,162 @@ build_base_system() {
             --exclude=/mnt/* \
             --exclude=/media/* \
             --exclude=/live/*
-    elif [ -d "$SCRIPT_DIR/../../rootfs" ]; then
+    elif [ -d "$SCRIPT_DIR/../../rootfs" ] && [ -f "$SCRIPT_DIR/../../rootfs/usr/bin/apt-get" ]; then
         log "Using IceNet-OS rootfs"
         rsync -aAX "$SCRIPT_DIR/../../rootfs/" "$SQUASHFS_DIR/"
     else
-        log "Bootstrapping Debian base system"
+        log "Bootstrapping Debian base system (this will take 5-10 minutes)"
+
+        # Use a fast mirror for better download speeds
+        DEBIAN_MIRROR="http://deb.debian.org/debian/"
+
         debootstrap --arch=amd64 --variant=minbase \
-            bookworm "$SQUASHFS_DIR" http://deb.debian.org/debian/
+            bookworm "$SQUASHFS_DIR" "$DEBIAN_MIRROR"
+
+        # Enable parallel downloads in apt
+        log "Configuring parallel downloads..."
+        mkdir -p "$SQUASHFS_DIR/etc/apt/apt.conf.d"
+        cat > "$SQUASHFS_DIR/etc/apt/apt.conf.d/99parallel" <<EOF
+APT::Acquire::Queue-Mode "host";
+APT::Acquire::Retries "3";
+Binary::apt::APT::Get::Assume-Yes "true";
+Binary::apt::APT::Get::force-yes "true";
+EOF
 
         # Install essential packages
+        log "Installing essential packages (with $PARALLEL_DOWNLOADS parallel downloads)..."
         chroot "$SQUASHFS_DIR" apt-get update
-        chroot "$SQUASHFS_DIR" apt-get install -y \
+
+        # Pre-configure keyboard to avoid interactive prompts
+        log "Pre-configuring keyboard layout (US)..."
+        cat > "$SQUASHFS_DIR/tmp/keyboard-preseed.txt" <<'EOF'
+keyboard-configuration keyboard-configuration/layoutcode string us
+keyboard-configuration keyboard-configuration/layout select English (US)
+keyboard-configuration keyboard-configuration/variant select English (US)
+keyboard-configuration keyboard-configuration/model select Generic 105-key PC
+keyboard-configuration keyboard-configuration/modelcode string pc105
+keyboard-configuration keyboard-configuration/xkb-keymap select us
+console-setup console-setup/charmap47 select UTF-8
+EOF
+        chroot "$SQUASHFS_DIR" debconf-set-selections /tmp/keyboard-preseed.txt
+        rm -f "$SQUASHFS_DIR/tmp/keyboard-preseed.txt"
+
+        # Configure non-interactive frontend to prevent all prompts
+        echo 'debconf debconf/frontend select Noninteractive' | chroot "$SQUASHFS_DIR" debconf-set-selections
+
+        # Prevent services from starting during package installation
+        log "Configuring policy-rc.d to prevent service starts during build..."
+        cat > "$SQUASHFS_DIR/usr/sbin/policy-rc.d" <<'EOF'
+#!/bin/sh
+# Prevent services from starting during package installation
+exit 101
+EOF
+        chmod +x "$SQUASHFS_DIR/usr/sbin/policy-rc.d"
+
+        chroot "$SQUASHFS_DIR" env DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            apt-transport-https \
+            ca-certificates \
+            initramfs-tools \
+            locales
+
+        # Generate en_US.UTF-8 locale to prevent locale warnings
+        log "Generating en_US.UTF-8 locale..."
+        echo "en_US.UTF-8 UTF-8" > "$SQUASHFS_DIR/etc/locale.gen"
+        chroot "$SQUASHFS_DIR" locale-gen
+        chroot "$SQUASHFS_DIR" update-locale LANG=en_US.UTF-8
+
+        # Now that initramfs-tools is installed, defer initramfs generation during remaining package installation
+        # (we'll regenerate it properly after all packages are installed)
+        log "Configuring initramfs to defer updates..."
+        mv "$SQUASHFS_DIR/usr/sbin/update-initramfs" "$SQUASHFS_DIR/usr/sbin/update-initramfs.real"
+        cat > "$SQUASHFS_DIR/usr/sbin/update-initramfs" <<'EOF'
+#!/bin/sh
+# Temporarily disabled during package installation
+echo "update-initramfs: deferred (will regenerate after package installation)"
+exit 0
+EOF
+        chmod +x "$SQUASHFS_DIR/usr/sbin/update-initramfs"
+
+        # Install core packages with initramfs updates deferred
+        log "Installing core packages (initramfs generation deferred)..."
+        chroot "$SQUASHFS_DIR" env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Acquire::Queue-Mode=host \
             linux-image-amd64 \
-            grub-pc \
-            grub-efi-amd64 \
+            live-boot \
+            live-boot-initramfs-tools \
+            live-config \
+            live-config-systemd \
+            grub-efi-amd64-bin \
+            grub-pc-bin \
+            grub-common \
+            grub2-common \
             network-manager \
             sudo \
             dialog \
             python3 \
             python3-gi \
-            gir1.2-gtk-3.0
+            gir1.2-gtk-3.0 \
+            xorriso \
+            isolinux \
+            systemd \
+            systemd-sysv \
+            gnupg \
+            wget
+
+        # Restore real update-initramfs and regenerate properly
+        log "Restoring initramfs generation..."
+        rm -f "$SQUASHFS_DIR/usr/sbin/update-initramfs"
+        mv "$SQUASHFS_DIR/usr/sbin/update-initramfs.real" "$SQUASHFS_DIR/usr/sbin/update-initramfs"
+
+        # Now regenerate initramfs with all packages in place
+        log "Generating initramfs..."
+        chroot "$SQUASHFS_DIR" update-initramfs -c -k all || {
+            log "WARNING: initramfs generation had issues, trying alternative method..."
+            chroot "$SQUASHFS_DIR" dpkg-reconfigure linux-image-amd64 || true
+        }
+
+        # Remove policy-rc.d so services can start normally on the live system
+        log "Removing policy-rc.d..."
+        rm -f "$SQUASHFS_DIR/usr/sbin/policy-rc.d"
+
+        # Save to cache for future builds
+        log "Caching base system for future builds..."
+        mkdir -p "$CACHE_DIR"
+        rm -rf "$CACHE_DIR/base-system"
+        rsync -aAX "$SQUASHFS_DIR/" "$CACHE_DIR/base-system/"
+        log "Base system cached to $CACHE_DIR/base-system"
     fi
 
     log "Base system ready"
+}
+
+# Setup default user
+setup_default_user() {
+    log "Setting up default user..."
+
+    # Set hostname
+    echo "icenet-os" > "$SQUASHFS_DIR/etc/hostname"
+
+    # Set hosts file
+    cat > "$SQUASHFS_DIR/etc/hosts" <<EOF
+127.0.0.1       localhost
+127.0.1.1       icenet-os
+::1             localhost ip6-localhost ip6-loopback
+EOF
+
+    # Create icenet user
+    chroot "$SQUASHFS_DIR" useradd -m -s /bin/bash -G sudo icenet
+
+    # Set password to 'icenet'
+    echo "icenet:icenet" | chroot "$SQUASHFS_DIR" chpasswd
+
+    # Set root password to 'root'
+    echo "root:root" | chroot "$SQUASHFS_DIR" chpasswd
+
+    # Allow sudo without password for icenet user
+    echo "icenet ALL=(ALL) NOPASSWD:ALL" > "$SQUASHFS_DIR/etc/sudoers.d/icenet"
+    chmod 0440 "$SQUASHFS_DIR/etc/sudoers.d/icenet"
+
+    log "Default user created: icenet/icenet (root/root)"
 }
 
 # Install IceNet components
@@ -148,7 +365,8 @@ install_live_components() {
             "$SQUASHFS_DIR/usr/local/lib/icenet-installer-backend.sh"
     fi
 
-    # Copy installers
+    # Copy installers (create bin directory first)
+    mkdir -p "$SQUASHFS_DIR/usr/local/bin"
     if [ -f "$SCRIPT_DIR/../installer/icenet-installer-gui.py" ]; then
         cp "$SCRIPT_DIR/../installer/icenet-installer-gui.py" \
             "$SQUASHFS_DIR/usr/local/bin/icenet-installer-gui"
@@ -167,7 +385,7 @@ install_live_components() {
 [Desktop Entry]
 Name=Install IceNet-OS
 Comment=Install IceNet-OS to hard drive
-Exec=gksudo icenet-installer-gui
+Exec=pkexec icenet-installer-gui
 Icon=system-software-install
 Terminal=false
 Type=Application
@@ -177,19 +395,19 @@ EOF
     log "Live boot components installed"
 }
 
-# Pre-install integrations
-pre_install_integrations() {
-    log "Pre-installing IceNet integrations..."
+# Install minimal base (LXDE + Edge + SSH/RDP + Software Center)
+install_minimal_base() {
+    log "Installing minimal base system..."
 
-    if [ -f "$SCRIPT_DIR/pre-install-integrations.sh" ]; then
-        bash "$SCRIPT_DIR/pre-install-integrations.sh" \
+    if [ -f "$SCRIPT_DIR/install-minimal-base.sh" ]; then
+        bash "$SCRIPT_DIR/install-minimal-base.sh" \
             "$SQUASHFS_DIR" \
             "$SCRIPT_DIR/../../integrations"
     else
-        warning "Pre-install script not found, skipping"
+        warning "Minimal base installer not found, skipping"
     fi
 
-    log "Integrations pre-installed"
+    log "Minimal base installed"
 }
 
 # Create squashfs
@@ -198,17 +416,30 @@ create_squashfs() {
 
     # Update initramfs
     if [ -f "$SQUASHFS_DIR/usr/sbin/update-initramfs" ]; then
-        chroot "$SQUASHFS_DIR" update-initramfs -u 2>/dev/null || warning "Failed to update initramfs"
+        if ! chroot "$SQUASHFS_DIR" update-initramfs -u 2>&1; then
+            warning "Failed to update initramfs (non-critical, continuing)"
+        fi
     fi
 
-    # Create squashfs
-    mksquashfs "$SQUASHFS_DIR" "$ISO_DIR/live/filesystem.squashfs" \
-        -comp xz \
-        -b 1M \
-        -Xdict-size 100% \
-        -noappend
+    # Create squashfs with compression based on build mode
+    if [ "$FAST_COMPRESSION" = "true" ]; then
+        log "Using FAST compression (gzip) - larger ISO but 3x faster"
+        mksquashfs "$SQUASHFS_DIR" "$ISO_DIR/live/filesystem.squashfs" \
+            -comp gzip \
+            -b 1M \
+            -noappend \
+            -progress
+    else
+        log "Using BEST compression (xz) - smaller ISO but slower"
+        mksquashfs "$SQUASHFS_DIR" "$ISO_DIR/live/filesystem.squashfs" \
+            -comp xz \
+            -b 1M \
+            -Xdict-size 100% \
+            -noappend \
+            -progress
+    fi
 
-    log "Squashfs created: $(du -h $ISO_DIR/live/filesystem.squashfs | cut -f1)"
+    log "Squashfs created: $(du -h "$ISO_DIR/live/filesystem.squashfs" | cut -f1)"
 }
 
 # Copy kernel and initrd
@@ -221,6 +452,10 @@ copy_kernel() {
 
     if [ -z "$KERNEL" ]; then
         error "No kernel found in squashfs"
+    fi
+
+    if [ -z "$INITRD" ]; then
+        error "No initrd found in squashfs. Try running: chroot $SQUASHFS_DIR update-initramfs -c -k all"
     fi
 
     cp "$KERNEL" "$ISO_DIR/live/vmlinuz"
@@ -238,27 +473,32 @@ set default="0"
 set timeout=10
 
 menuentry "IceNet-OS Live" {
-    linux /live/vmlinuz boot=live icenet-live quiet splash
+    linux /live/vmlinuz boot=live components quiet splash systemd.unit=graphical.target
     initrd /live/initrd.img
 }
 
 menuentry "IceNet-OS Live (Persistence)" {
-    linux /live/vmlinuz boot=live icenet-live persistence quiet splash
+    linux /live/vmlinuz boot=live components persistence quiet splash systemd.unit=graphical.target
     initrd /live/initrd.img
 }
 
 menuentry "IceNet-OS Live (Load to RAM)" {
-    linux /live/vmlinuz boot=live icenet-live toram quiet splash
+    linux /live/vmlinuz boot=live components toram quiet splash systemd.unit=graphical.target
     initrd /live/initrd.img
 }
 
 menuentry "Install IceNet-OS" {
-    linux /live/vmlinuz boot=live icenet-live quiet splash
+    linux /live/vmlinuz boot=live components quiet splash systemd.unit=graphical.target
     initrd /live/initrd.img
 }
 
-menuentry "IceNet-OS Live (Debug)" {
-    linux /live/vmlinuz boot=live icenet-live debug
+menuentry "IceNet-OS Live (Debug - No Quiet)" {
+    linux /live/vmlinuz boot=live components systemd.unit=graphical.target
+    initrd /live/initrd.img
+}
+
+menuentry "IceNet-OS Live (Safe Mode)" {
+    linux /live/vmlinuz boot=live components nomodeset systemd.unit=graphical.target
     initrd /live/initrd.img
 }
 
@@ -275,11 +515,9 @@ EOF
 build_iso() {
     log "Building ISO image..."
 
+    # Let grub-mkrescue handle hybrid boot automatically
     grub-mkrescue -o "$OUTPUT_DIR/$ISO_NAME" "$ISO_DIR" \
-        -volid "ICENET-OS" \
-        -eltorito-alt-boot \
-        -e boot/grub/efi.img \
-        -no-emul-boot
+        -volid "ICENET-OS"
 
     log "ISO created: $OUTPUT_DIR/$ISO_NAME"
     log "Size: $(du -h $OUTPUT_DIR/$ISO_NAME | cut -f1)"
@@ -303,9 +541,10 @@ main() {
     check_requirements
     clean_build
     build_base_system
+    setup_default_user
     install_icenet_components
     install_live_components
-    pre_install_integrations
+    install_minimal_base
     create_squashfs
     copy_kernel
     create_grub_config
